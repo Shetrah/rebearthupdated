@@ -35,12 +35,19 @@ Deno.serve(async (request) => {
     if (!basicAuth) return Response.json({ error: 'PayHero is not configured: add the PAYHERO_BASIC_AUTH secret to Supabase Edge Function secrets.' }, { status: 503, headers: cors });
     if (!callbackSecret) return Response.json({ error: 'Payments are not fully configured: add the PAYHERO_CALLBACK_SECRET secret to Supabase Edge Function secrets.' }, { status: 503, headers: cors });
     if (!/^\d+$/.test(channelId)) return Response.json({ error: 'PayHero channel configuration is invalid. Set PAYHERO_CHANNEL_ID to the numeric channel ID.' }, { status: 503, headers: cors });
+    // Secrets are sometimes pasted with surrounding quotes or line breaks from dashboards.
+    // Strip those formatting characters before setting the HTTP header; never log the value.
+    const cleanedAuth = basicAuth.trim().replace(/^["']|["']$/g, '').replace(/[\r\n]/g, '').trim();
+    const authorizationValue = cleanedAuth.startsWith('Basic ') ? cleanedAuth : `Basic ${cleanedAuth}`;
+    if (!/^Basic [A-Za-z0-9+/]+={0,2}$/.test(authorizationValue)) {
+      return Response.json({ error: 'PayHero authorization secret is malformed. Set PAYHERO_BASIC_AUTH to the PayHero Basic Auth token only, without quotes or line breaks.' }, { status: 503, headers: cors });
+    }
     const callbackUrl = `${supabaseUrl}/functions/v1/payhero-callback?secret=${encodeURIComponent(callbackSecret)}`;
     let payheroResponse: Response;
     try {
       payheroResponse = await fetch('https://backend.payhero.co.ke/api/v2/payments', {
         method: 'POST',
-        headers: { Authorization: basicAuth.startsWith('Basic ') ? basicAuth : `Basic ${basicAuth}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: authorizationValue, 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: Number(invoice.total_amount), phone_number: phone, channel_id: Number(channelId), provider: 'm-pesa', external_reference: invoice.invoice_number, customer_name: invoice.customer_name, callback_url: callbackUrl }),
       });
     } catch (error) {
