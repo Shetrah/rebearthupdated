@@ -35,12 +35,18 @@ Deno.serve(async (request) => {
     if (!basicAuth) return Response.json({ error: 'PayHero is not configured: add the PAYHERO_BASIC_AUTH secret to Supabase Edge Function secrets.' }, { status: 503, headers: cors });
     if (!callbackSecret) return Response.json({ error: 'Payments are not fully configured: add the PAYHERO_CALLBACK_SECRET secret to Supabase Edge Function secrets.' }, { status: 503, headers: cors });
     if (!/^\d+$/.test(channelId)) return Response.json({ error: 'PayHero channel configuration is invalid. Set PAYHERO_CHANNEL_ID to the numeric channel ID.' }, { status: 503, headers: cors });
-    // Secrets are sometimes pasted with surrounding quotes or line breaks from dashboards.
-    // Strip those formatting characters before setting the HTTP header; never log the value.
-    const cleanedAuth = basicAuth.trim().replace(/^["']|["']$/g, '').replace(/[\r\n]/g, '').trim();
-    const authorizationValue = cleanedAuth.startsWith('Basic ') ? cleanedAuth : `Basic ${cleanedAuth}`;
-    if (!/^Basic [A-Za-z0-9+/]+={0,2}$/.test(authorizationValue)) {
-      return Response.json({ error: 'PayHero authorization secret is malformed. Set PAYHERO_BASIC_AUTH to the PayHero Basic Auth token only, without quotes or line breaks.' }, { status: 503, headers: cors });
+    // PayHero's dashboard may provide either the raw token or a complete Basic header.
+    // Preserve the token verbatim apart from outer whitespace and never log its value.
+    const token = basicAuth.trim();
+    const authorizationValue = /^Basic\s/i.test(token) ? token : `Basic ${token}`;
+    if (!token || /[\r\n\u0000-\u001f\u007f]/.test(authorizationValue)) {
+      return Response.json({ error: 'PayHero authorization value contains invalid header characters. Check the PAYHERO_BASIC_AUTH secret formatting.' }, { status: 503, headers: cors });
+    }
+    try {
+      new Headers({ Authorization: authorizationValue, 'Content-Type': 'application/json' });
+    } catch (error) {
+      console.error('PayHero authorization header failed validation:', error instanceof Error ? error.message : 'invalid header');
+      return Response.json({ error: 'PayHero authorization value is not a valid HTTP header. Check the PAYHERO_BASIC_AUTH secret formatting.' }, { status: 503, headers: cors });
     }
     const callbackUrl = `${supabaseUrl}/functions/v1/payhero-callback?secret=${encodeURIComponent(callbackSecret)}`;
     let payheroResponse: Response;
