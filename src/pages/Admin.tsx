@@ -105,7 +105,7 @@ export default function Admin() {
     }
     if (invoice.customerEmail) {
       try { await emailInvoice(invoice, effectivePaymentStatus === 'paid' ? 'receipt' : 'invoice'); }
-      catch (e) { console.error('POS document email failed:', e); }
+      catch (e) { console.error('POS document email failed:', e); toast.error(e instanceof Error ? `Email failed: ${e.message}` : 'POS document email failed'); }
     }
     if (posPaymentMethod === 'M-Pesa') {
       try {
@@ -142,7 +142,7 @@ export default function Admin() {
         const receipt = { ...invoice, status: 'paid' as const };
         setPosPaymentDialog(current => current?.orderNumber === orderNumber ? { ...current, status: 'completed', details: 'PayHero confirmed the payment. The order is marked paid and the receipt is ready.' } : current);
         downloadInvoice(receipt, 'receipt');
-        if (receipt.customerEmail) try { await emailInvoice(receipt, 'receipt'); } catch (e) { console.error('POS receipt email failed:', e); }
+        if (receipt.customerEmail) try { await emailInvoice(receipt, 'receipt'); } catch (e) { console.error('POS receipt email failed:', e); toast.error(e instanceof Error ? `Receipt email failed: ${e.message}` : 'POS receipt email failed'); }
         toast.success('M-Pesa payment confirmed. Receipt generated.'); await load(); return;
       }
       if (data?.status === 'failed') {
@@ -163,7 +163,7 @@ export default function Admin() {
     if (invoiceError) console.error('Could not update POS invoice status:', invoiceError);
     const receipt = { ...posPaymentDialog.invoice, status: 'paid' as const };
     downloadInvoice(receipt, 'receipt');
-    if (receipt.customerEmail) try { await emailInvoice(receipt, 'receipt'); } catch (e) { console.error('POS receipt email failed:', e); }
+    if (receipt.customerEmail) try { await emailInvoice(receipt, 'receipt'); } catch (e) { console.error('POS receipt email failed:', e); toast.error(e instanceof Error ? `Receipt email failed: ${e.message}` : 'POS receipt email failed'); }
     setPosPaymentDialog(current => current?.orderNumber === posPaymentDialog.orderNumber ? { ...current, status: 'completed', details: 'Payment received and recorded. The order is marked paid and the receipt is ready.' } : current);
     setSaving(false);
     toast.success('Payment recorded. Receipt generated.');

@@ -86,7 +86,8 @@ const Payment: React.FC = () => {
         setDocumentMessage(`Invoice sent to ${checkoutData.email}. Check your inbox and spam folder.`);
       } catch (emailError) {
         console.error('Invoice email failed:', emailError);
-        setDocumentMessage(`Invoice downloaded. We couldn't email it to ${checkoutData.email}; please contact us if it doesn't arrive.`);
+        const reason = emailError instanceof Error ? emailError.message : 'unknown email delivery error';
+        setDocumentMessage(`Invoice downloaded, but email delivery to ${checkoutData.email} failed: ${reason}`);
       }
       
       // Download invoice PDF
@@ -208,7 +209,7 @@ const Payment: React.FC = () => {
       
       downloadInvoice(receiptData, 'receipt');
       try { await emailInvoice(receiptData, 'receipt', checkoutData!.guestToken); setDocumentMessage(`Payment confirmed. Receipt sent to ${checkoutData!.email}.`); }
-      catch (emailError) { console.error('Receipt email failed:', emailError); setDocumentMessage(`Payment confirmed. Receipt email to ${checkoutData!.email} failed; please contact support.`); }
+      catch (emailError) { console.error('Receipt email failed:', emailError); const reason = emailError instanceof Error ? emailError.message : 'unknown email delivery error'; setDocumentMessage(`Payment confirmed. Receipt email to ${checkoutData!.email} failed: ${reason}`); }
       
       // Clear cart and checkout data
       clearCart();

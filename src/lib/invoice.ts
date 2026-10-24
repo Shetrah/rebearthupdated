@@ -128,5 +128,15 @@ export const emailInvoice = async (invoiceData: InvoiceData, type: 'invoice' | '
   const doc = generateInvoicePDF(invoiceData, type);
   const base64 = doc.output('datauristring').split(',')[1];
   const { error } = await supabase.functions.invoke('send-document', { body: { to: invoiceData.customerEmail, customerName: invoiceData.customerName, invoiceNumber: invoiceData.invoiceNumber, type, pdfBase64: base64, guestToken } });
-  if (error) throw new Error(error.message || 'Email delivery failed');
+  if (error) {
+    let message = error.message || 'Email delivery failed';
+    try {
+      const response = (error as typeof error & { context?: Response }).context;
+      if (response) {
+        const payload = await response.clone().json();
+        if (typeof payload?.error === 'string') message = payload.error;
+      }
+    } catch { /* retain the SDK error message */ }
+    throw new Error(message);
+  }
 };
