@@ -10,5 +10,8 @@ verify_jwt = false
 [functions.payment-status]
 verify_jwt = false
 
+[functions.customer-orders]
+verify_jwt = false
+
 [functions.payhero-callback]
 verify_jwt = false

@@ -1,12 +1,29 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { User, Mail, Phone, MapPin, Package, Edit, Save, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+
+interface OrderRecord {
+  id: string;
+  order_number: string;
+  created_at: string;
+  total_amount: number;
+  status: string;
+  payment_status?: string | null;
+  payment_method?: string | null;
+  items: Array<{ name?: string; quantity?: number; qty?: number }>;
+  customer_address?: string | null;
+  source?: string | null;
+}
 
 const Profile: React.FC = () => {
   const { user, updateProfile, logout } = useAuth();
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState('');
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
@@ -14,7 +31,38 @@ const Profile: React.FC = () => {
     address: user?.address || ''
   });
 
-  const orders = JSON.parse(localStorage.getItem('userOrders') || '[]');
+  const userId = user?.id;
+  const loadOrders = useCallback(async () => {
+    if (!userId) {
+      setOrders([]);
+      setOrdersLoading(false);
+      return;
+    }
+    setOrdersLoading(true);
+    setOrdersError('');
+    try {
+      const { data, error } = await supabase.functions.invoke('customer-orders', { body: {} });
+      if (error) {
+        let message = error.message || 'Could not load your orders.';
+        try {
+          const response = (error as typeof error & { context?: Response }).context;
+          if (response) {
+            const payload = await response.clone().json();
+            if (typeof payload?.error === 'string') message = payload.error;
+          }
+        } catch { /* keep the Supabase error message */ }
+        throw new Error(message);
+      }
+      setOrders(Array.isArray(data?.orders) ? data.orders : []);
+    } catch (error) {
+      setOrdersError(error instanceof Error ? error.message : 'Could not load your orders.');
+      setOrders([]);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => { void loadOrders(); }, [loadOrders]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -229,7 +277,14 @@ const Profile: React.FC = () => {
             <span>Order History</span>
           </h2>
 
-          {orders.length === 0 ? (
+          {ordersLoading ? (
+            <p className="py-8 text-center text-gray-500">Loading your purchases…</p>
+          ) : ordersError ? (
+            <div className="py-8 text-center">
+              <p className="text-red-700">{ordersError}</p>
+              <button onClick={() => void loadOrders()} className="mt-3 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">Try again</button>
+            </div>
+          ) : orders.length === 0 ? (
             <div className="text-center py-8">
               <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500 text-lg">No orders yet</p>
@@ -237,33 +292,31 @@ const Profile: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {orders.map((order: any, index: number) => (
-                <div key={index} className="border border-gray-200 rounded-lg p-6">
-                  <div className="flex justify-between items-start mb-4">
+              {orders.map((order) => (
+                <div key={order.id} className="border border-gray-200 rounded-lg p-6">
+                  <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h3 className="font-semibold text-gray-900">Order #{order.orderNumber}</h3>
-                      <p className="text-sm text-gray-600">
-                        {new Date(order.timestamp).toLocaleDateString()}
-                      </p>
+                      <h3 className="font-semibold text-gray-900">Order #{order.order_number || order.id.slice(0, 8)}</h3>
+                      <p className="text-sm text-gray-600">{new Date(order.created_at).toLocaleDateString()}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-green-600">
-                        KES {order.totalAmount.toLocaleString()}
-                      </p>
-                      <span className="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-                        {order.status}
-                      </span>
+                      <p className="font-bold text-green-600">KES {Number(order.total_amount || 0).toLocaleString()}</p>
+                      <span className="mt-1 inline-block rounded-full bg-green-100 px-2 py-1 text-xs capitalize text-green-800">{order.status || 'pending'}</span>
                     </div>
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
                     <div>
-                      <p className="text-gray-600">Account Number: {order.accountNumber}</p>
-                      <p className="text-gray-600">Payment: {order.paymentMethod}</p>
+                      <p className="font-medium text-gray-700">Items</p>
+                      {Array.isArray(order.items) && order.items.length ? (
+                        <ul className="mt-1 space-y-1 text-gray-600">
+                          {order.items.map((item, index) => <li key={`${item.name || 'item'}-${index}`}>{Number(item.quantity ?? item.qty ?? 1)} × {item.name || 'Product'}</li>)}
+                        </ul>
+                      ) : <p className="text-gray-600">Order details unavailable</p>}
                     </div>
-                    <div>
-                      <p className="text-gray-600">Items: {order.cartItems.length}</p>
-                      <p className="text-gray-600">Delivery: {order.address}</p>
+                    <div className="space-y-1 text-gray-600">
+                      <p>Payment: {order.payment_method || 'Not specified'} · {order.payment_status || 'pending'}</p>
+                      {order.customer_address && <p>Delivery: {order.customer_address}</p>}
+                      <p>Channel: {order.source === 'pos' ? 'Walk-in' : 'Online'}</p>
                     </div>
                   </div>
                 </div>
