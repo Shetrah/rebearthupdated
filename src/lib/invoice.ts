@@ -75,90 +75,42 @@ export const generateInvoicePDF = (invoiceData: InvoiceData, type: 'invoice' | '
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.width;
   
-  // Company letterhead: brand logo, preserved theme colours, and a clean divider.
-  doc.setFillColor(18, 58, 48);
-  doc.rect(0, 0, pageWidth, 6, 'F');
-  try { doc.addImage(REBEARTH_LOGO, 'JPEG', 18, 14, 24, 24); } catch { /* text letterhead remains if the image cannot be embedded */ }
-  doc.setTextColor(18, 58, 48);
-  doc.setFontSize(17);
-  doc.setFont('helvetica', 'bold');
-  doc.text('REBEARTH SOLUTIONS LIMITED', 48, 22);
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(78, 91, 86);
-  doc.text('Agricultural Solutions & Services', 48, 29);
-  doc.text('P.O. Box 72-49305, Kisumu, Kenya', 48, 35);
-  doc.text('Phone: +254706169776  |  Email: info@rebearthsolutions.com', 48, 41);
-  doc.setDrawColor(22, 107, 69);
-  doc.setLineWidth(0.8);
-  doc.line(18, 47, pageWidth - 18, 47);
-  doc.setTextColor(30, 41, 59);
-  
-  // Invoice/Receipt title
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(22, 107, 69);
-  const title = type === 'invoice' ? 'INVOICE' : 'RECEIPT';
-  doc.text(title, pageWidth / 2, 66, { align: 'center' });
-  doc.setTextColor(30, 41, 59);
-  
-  // Invoice details
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`${title} #: ${invoiceData.invoiceNumber}`, 20, 82);
-  doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 91);
-  doc.text(`Status: ${invoiceData.status.toUpperCase()}`, 20, 100);
-  
-  // Customer details
-  doc.setFont('helvetica', 'bold');
-  doc.text('BILL TO:', 20, 118);
-  doc.setFont('helvetica', 'normal');
-  doc.text(invoiceData.customerName, 20, 127);
-  doc.text(invoiceData.customerEmail, 20, 136);
-  doc.text(invoiceData.customerPhone, 20, 145);
-  doc.text(invoiceData.customerAddress, 20, 154);
-  
-  // Items table header
-  let yPosition = 174;
-  doc.setFont('helvetica', 'bold');
-  doc.text('ITEM', 20, yPosition);
-  doc.text('QTY', 120, yPosition);
-  doc.text('PRICE', 140, yPosition);
-  doc.text('TOTAL', 170, yPosition);
-  
-  // Draw line under header
-  doc.line(20, yPosition + 5, 190, yPosition + 5);
-  
-  // Items
-  doc.setFont('helvetica', 'normal');
-  yPosition += 15;
-  
+  const title = type === 'invoice' ? 'INVOICE' : 'PAYMENT RECEIPT';
+  doc.setFillColor(12, 47, 39); doc.rect(0, 0, pageWidth, 66, 'F');
+  doc.setFillColor(20, 184, 115); doc.rect(0, 66, pageWidth, 3, 'F');
+  try { doc.addImage(REBEARTH_LOGO, 'JPEG', 17, 13, 38, 38); } catch { /* brand name remains visible */ }
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.text('REBEARTH SOLUTIONS', 63, 25);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.text('Sustainable agriculture. Stronger harvests.', 63, 33);
+  doc.text('Kisumu, Kenya  |  +254 706 169 776', 63, 41);
+  doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.text(title, pageWidth-17, 27, { align:'right' });
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.text(invoiceData.invoiceNumber, pageWidth-17, 39, { align:'right' });
+  doc.setTextColor(24,40,34);
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('CUSTOMER', 18, 84);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.text(doc.splitTextToSize(`${invoiceData.customerName}\n${invoiceData.customerEmail}\n${invoiceData.customerPhone}\n${invoiceData.customerAddress}`, 82), 18, 93);
+  doc.setFont('helvetica','bold'); doc.text('DOCUMENT DETAILS', 112, 84);
+  doc.setFont('helvetica','normal'); doc.text(`Date: ${new Date().toLocaleDateString()}`, 112, 93);
+  doc.text(`Status: ${invoiceData.status.toUpperCase()}`, 112, 101);
+  let yPosition = 125;
+  doc.setFillColor(236,247,241); doc.roundedRect(16, yPosition-9, pageWidth-32, 12, 2, 2, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(20,83,60);
+  doc.text('ITEM',20,yPosition); doc.text('QTY',126,yPosition,{align:'right'}); doc.text('UNIT PRICE',158,yPosition,{align:'right'}); doc.text('AMOUNT',pageWidth-20,yPosition,{align:'right'});
+  doc.setTextColor(24,40,34); yPosition += 12;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
   invoiceData.items.forEach((item) => {
-    doc.text(item.name, 20, yPosition);
-    doc.text(item.quantity.toString(), 120, yPosition);
-    doc.text(`KES ${item.price.toLocaleString()}`, 140, yPosition);
-    doc.text(`KES ${item.total.toLocaleString()}`, 170, yPosition);
-    yPosition += 10;
+    const lines = doc.splitTextToSize(item.name, 92);
+    if (yPosition > 260) { doc.addPage(); yPosition = 24; }
+    doc.text(lines,20,yPosition); doc.text(String(item.quantity),126,yPosition,{align:'right'});
+    doc.text(item.price.toLocaleString(),158,yPosition,{align:'right'}); doc.text(item.total.toLocaleString(),pageWidth-20,yPosition,{align:'right'});
+    yPosition += Math.max(9, lines.length*5+3); doc.setDrawColor(225,234,228); doc.line(18,yPosition-3,pageWidth-18,yPosition-3);
   });
-  
-  // Total
-  yPosition += 10;
-  doc.line(20, yPosition, 190, yPosition);
-  yPosition += 10;
-  doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL AMOUNT:', 140, yPosition);
-  doc.text(`KES ${invoiceData.totalAmount.toLocaleString()}`, 170, yPosition);
-  
-  // Footer
-  yPosition += 30;
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Thank you for choosing Rebearth Solutions Limited!', pageWidth / 2, yPosition, { align: 'center' });
-  doc.text('For any inquiries, please contact us at info@rebearthsolutions.com', pageWidth / 2, yPosition + 10, { align: 'center' });
-  
-  if (type === 'receipt') {
-    doc.text('This is a computer-generated receipt. No signature required.', pageWidth / 2, yPosition + 20, { align: 'center' });
-  }
+  yPosition += 10; doc.setFillColor(12,47,39); doc.roundedRect(100,yPosition-6,pageWidth-116,24,3,3,'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('TOTAL  ·  KES',108,yPosition+3);
+  doc.setFontSize(14); doc.text(invoiceData.totalAmount.toLocaleString(),pageWidth-24,yPosition+3,{align:'right'});
+  doc.setTextColor(85,102,94); doc.setFont('helvetica','normal'); doc.setFontSize(8);
+  const footerY = Math.min(yPosition+38, 282);
+  doc.text('Thank you for choosing Rebearth Solutions.', pageWidth/2, footerY, {align:'center'});
+  doc.text(type === 'receipt' ? 'Payment received. This is your official payment receipt.' : 'Please use the document number as your payment reference.', pageWidth/2, footerY+6, {align:'center'});
   
   return doc;
 };
@@ -168,4 +120,12 @@ export const downloadInvoice = (invoiceData: InvoiceData, type: 'invoice' | 'rec
   const doc = generateInvoicePDF(invoiceData, type);
   const filename = `${type}_${invoiceData.invoiceNumber}.pdf`;
   doc.save(filename);
+};
+
+export const emailInvoice = async (invoiceData: InvoiceData, type: 'invoice' | 'receipt' = 'invoice') => {
+  if (!invoiceData.customerEmail) throw new Error('Customer email is required to send this document.');
+  const doc = generateInvoicePDF(invoiceData, type);
+  const base64 = doc.output('datauristring').split(',')[1];
+  const { error } = await supabase.functions.invoke('send-document', { body: { to: invoiceData.customerEmail, customerName: invoiceData.customerName, invoiceNumber: invoiceData.invoiceNumber, type, pdfBase64: base64 } });
+  if (error) throw new Error(error.message || 'Email delivery failed');
 };

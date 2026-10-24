@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Smartphone, CheckCircle, AlertTriangle, Copy, FileText } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { initiateSTKPush } from '../lib/mpesa';
-import { createInvoice, generateInvoiceNumber, downloadInvoice, updateInvoiceStatus } from '../lib/invoice';
+import { createInvoice, generateInvoiceNumber, downloadInvoice, emailInvoice, updateInvoiceStatus } from '../lib/invoice';
 import { sendPaymentConfirmationSMS } from '../lib/sms';
 import { supabase } from '../lib/supabase';
 
@@ -69,7 +69,9 @@ const Payment: React.FC = () => {
       };
 
       // Save invoice and a corresponding customer order so the admin portal can track it.
-      await createInvoice(invoiceData);
+      const invoiceRecord = await createInvoice(invoiceData);
+      try { await emailInvoice(invoiceData, 'invoice'); }
+      catch (emailError) { console.error('Invoice email failed:', emailError); alert('Invoice created. Email delivery failed; please verify the Resend setup or download the invoice here.'); }
       const { data: authData } = await supabase.auth.getUser();
       const { error: orderError } = await supabase.from('orders').upsert({
         order_number: checkoutData.orderNumber,
@@ -84,6 +86,7 @@ const Payment: React.FC = () => {
         payment_status: 'pending',
         payment_method: 'M-Pesa',
         source: 'website',
+        invoice_id: invoiceRecord.id,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'order_number', ignoreDuplicates: true });
       if (orderError) throw new Error(`Order could not be saved: ${orderError.message}`);
@@ -226,6 +229,8 @@ const Payment: React.FC = () => {
       };
       
       downloadInvoice(receiptData, 'receipt');
+      try { await emailInvoice(receiptData, 'receipt'); }
+      catch (emailError) { console.error('Receipt email failed:', emailError); alert('Payment completed, but the receipt email could not be sent. Please contact support.'); }
       
       // Clear cart and checkout data
       clearCart();

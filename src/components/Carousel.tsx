@@ -12,10 +12,11 @@ const Carousel: React.FC = () => {
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [managedImages, setManagedImages] = useState<string[]>([]);
-  useEffect(() => { let alive = true; supabase.from('site_content').select('value').eq('key','hero_images').maybeSingle().then(({data}) => { if (!alive || !data?.value) return; try { const parsed = JSON.parse(data.value); if (Array.isArray(parsed)) setManagedImages(parsed.filter((url:any)=>typeof url === 'string' && /^https?:\/\//.test(url))); } catch { /* keep the original carousel if the saved value is not valid JSON */ } }); return ()=>{alive=false;}; }, []);
+  useEffect(() => { let alive = true; supabase.from('site_content').select('value').eq('key','hero_images').maybeSingle().then(({data}) => { if (!alive || !data?.value) return; let urls: string[] = []; try { const parsed = JSON.parse(data.value); if (Array.isArray(parsed)) urls = parsed.filter((url:any)=>typeof url === 'string'); } catch { urls = data.value.split(/\r?\n/).map((url:string)=>url.trim()); } setManagedImages(urls.filter(url => /^https?:\/\//.test(url))); }); return ()=>{alive=false;}; }, []);
   const activeImages = managedImages.length ? managedImages : images;
 
   useEffect(() => {
+    setCurrentIndex(index => Math.min(index, activeImages.length - 1));
     const interval = setInterval(() => {
       setCurrentIndex((prevIndex) => (prevIndex + 1) % activeImages.length);
     }, 5000);

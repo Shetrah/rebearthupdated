@@ -16,10 +16,10 @@ app.options('*', (req, res) => {
 
 app.post('/', async (req, res) => {
   try {
-    // Replace with your actual Supabase URL and anon key
+    // Service role is required because Safaricom callbacks have no customer JWT.
     const supabaseClient = createClient(
       process.env.SUPABASE_URL as string,
-      process.env.SUPABASE_ANON_KEY as string
+      process.env.SUPABASE_SERVICE_ROLE_KEY as string
     );
 
     const callbackData = req.body;
@@ -60,16 +60,24 @@ app.post('/', async (req, res) => {
 
     // If payment is successful, update invoice status
     if (status === 'completed' && payment) {
-      const { error: invoiceError } = await supabaseClient
+      const { data: invoice, error: invoiceError } = await supabaseClient
         .from('invoices')
         .update({
           status: 'paid',
           updated_at: new Date().toISOString()
         })
-        .eq('invoice_number', payment.invoice_id);
+        .eq('id', payment.invoice_id)
+        .select('id, invoice_number')
+        .single();
 
       if (invoiceError) {
         console.error('Error updating invoice:', invoiceError);
+      } else if (invoice) {
+        const { error: orderError } = await supabaseClient
+          .from('orders')
+          .update({ payment_status: 'paid', status: 'paid', updated_at: new Date().toISOString() })
+          .eq('invoice_id', invoice.id);
+        if (orderError) console.error('Error updating linked order:', orderError);
       }
     }
 
