@@ -37,9 +37,15 @@ Deno.serve(async (request) => {
     if (!basicAuth) return Response.json({ error: 'PayHero is not configured: add the PAYHERO_BASIC_AUTH secret to Supabase Edge Function secrets.' }, { status: 503, headers: cors });
     if (!callbackSecret) return Response.json({ error: 'Payments are not fully configured: add the PAYHERO_CALLBACK_SECRET secret to Supabase Edge Function secrets.' }, { status: 503, headers: cors });
     if (!/^\d+$/.test(channelId)) return Response.json({ error: 'PayHero channel configuration is invalid. Set PAYHERO_CHANNEL_ID to the numeric channel ID.' }, { status: 503, headers: cors });
-    // Match the PHP integration: the dashboard token may be stored raw or as a complete
-    // Basic header. Preserve its value apart from outer whitespace; never log the secret.
-    const token = basicAuth.trim();
+    // Match the PHP integration: accept a raw token or a complete Basic header. Secrets
+    // copied from env files are often wrapped in quotes or folded across lines; normalize
+    // that formatting without logging or otherwise exposing the token.
+    let token = basicAuth.trim();
+    if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+      token = token.slice(1, -1).trim();
+    }
+    token = token.replace(/[\r\n]/g, '').trim();
+    token = token.replace(/^Authorization:\s*/i, '');
     const authorizationValue = /^Basic\s/i.test(token) ? token : `Basic ${token}`;
     if (!token || /[\r\n\u0000-\u001f\u007f"']/.test(authorizationValue)) {
       return Response.json({ error: 'PayHero authorization value contains invalid header characters. Check the PAYHERO_BASIC_AUTH secret formatting.' }, { status: 503, headers: cors });
