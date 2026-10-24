@@ -17,8 +17,10 @@ Deno.serve(async (request) => {
     }
     const { phoneNumber, invoiceNumber, guestToken } = await request.json();
     if (typeof invoiceNumber !== 'string' || typeof phoneNumber !== 'string') return Response.json({ error: 'Invoice and phone number are required' }, { status: 400, headers: cors });
-    const phone = phoneNumber.replace(/[\s()+-]/g, '').replace(/^254/, '0');
-    if (!/^0[17]\d{8}$/.test(phone)) return Response.json({ error: 'Enter a valid Kenyan M-Pesa phone number' }, { status: 400, headers: cors });
+    let phone = phoneNumber.replace(/\D/g, '');
+    if (/^0[17]\d{8}$/.test(phone)) phone = `254${phone.slice(1)}`;
+    else if (/^[17]\d{8}$/.test(phone)) phone = `254${phone}`;
+    if (!/^254[17]\d{8}$/.test(phone)) return Response.json({ error: 'Enter a valid Kenyan M-Pesa phone number' }, { status: 400, headers: cors });
 
     const admin = createClient(supabaseUrl, serviceKey);
     const { data: invoice, error: invoiceError } = await admin.from('invoices').select('id,invoice_number,user_id,guest_token,total_amount,status,customer_name').eq('invoice_number', invoiceNumber).maybeSingle();
@@ -35,11 +37,11 @@ Deno.serve(async (request) => {
     if (!basicAuth) return Response.json({ error: 'PayHero is not configured: add the PAYHERO_BASIC_AUTH secret to Supabase Edge Function secrets.' }, { status: 503, headers: cors });
     if (!callbackSecret) return Response.json({ error: 'Payments are not fully configured: add the PAYHERO_CALLBACK_SECRET secret to Supabase Edge Function secrets.' }, { status: 503, headers: cors });
     if (!/^\d+$/.test(channelId)) return Response.json({ error: 'PayHero channel configuration is invalid. Set PAYHERO_CHANNEL_ID to the numeric channel ID.' }, { status: 503, headers: cors });
-    // PayHero's dashboard may provide either the raw token or a complete Basic header.
-    // Preserve the token verbatim apart from outer whitespace and never log its value.
+    // Match the PHP integration: the dashboard token may be stored raw or as a complete
+    // Basic header. Preserve its value apart from outer whitespace; never log the secret.
     const token = basicAuth.trim();
     const authorizationValue = /^Basic\s/i.test(token) ? token : `Basic ${token}`;
-    if (!token || /[\r\n\u0000-\u001f\u007f]/.test(authorizationValue)) {
+    if (!token || /[\r\n\u0000-\u001f\u007f"']/.test(authorizationValue)) {
       return Response.json({ error: 'PayHero authorization value contains invalid header characters. Check the PAYHERO_BASIC_AUTH secret formatting.' }, { status: 503, headers: cors });
     }
     try {
@@ -53,8 +55,9 @@ Deno.serve(async (request) => {
     try {
       payheroResponse = await fetch('https://backend.payhero.co.ke/api/v2/payments', {
         method: 'POST',
-        headers: { Authorization: authorizationValue, 'Content-Type': 'application/json' },
+        headers: { Authorization: authorizationValue, 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ amount: Number(invoice.total_amount), phone_number: phone, channel_id: Number(channelId), provider: 'm-pesa', external_reference: invoice.invoice_number, customer_name: invoice.customer_name, callback_url: callbackUrl }),
+        signal: AbortSignal.timeout(30_000),
       });
     } catch (error) {
       console.error('PayHero request could not reach provider:', error);
@@ -63,17 +66,22 @@ Deno.serve(async (request) => {
     const responseText = await payheroResponse.text();
     let result: Record<string, unknown> = {};
     try { result = responseText ? JSON.parse(responseText) : {}; } catch { /* PayHero may return a plain-text gateway error. */ }
-    if (!payheroResponse.ok || result.success !== true || !result.CheckoutRequestID) {
+    if (!payheroResponse.ok || result.success === false) {
       const detail = typeof result.message === 'string' ? result.message : typeof result.error === 'string' ? result.error : responseText.slice(0, 300);
       console.error('PayHero rejected STK request:', payheroResponse.status, detail);
       return Response.json({ error: detail ? `PayHero could not start the M-Pesa request: ${detail}` : `PayHero could not start the M-Pesa request (HTTP ${payheroResponse.status}).` }, { status: 502, headers: cors });
     }
-    const { error: paymentError } = await admin.from('payments').insert({ invoice_id: invoice.id, user_id: user?.id ?? null, transaction_id: result.CheckoutRequestID, phone_number: phone, amount: Number(invoice.total_amount), status: 'pending' });
+    const checkoutRequestId = result.CheckoutRequestID ?? result.checkout_request_id;
+    if (typeof checkoutRequestId !== 'string' || !checkoutRequestId.trim()) {
+      console.error('PayHero accepted request without a CheckoutRequestID:', payheroResponse.status, responseText.slice(0, 300));
+      return Response.json({ error: 'PayHero accepted the request but returned no checkout ID, so payment status cannot be tracked. Contact support before retrying.' }, { status: 502, headers: cors });
+    }
+    const { error: paymentError } = await admin.from('payments').insert({ invoice_id: invoice.id, user_id: user?.id ?? null, transaction_id: checkoutRequestId, phone_number: phone, amount: Number(invoice.total_amount), status: 'pending' });
     if (paymentError) {
       console.error('PayHero STK started but payment record could not be saved:', paymentError);
       return Response.json({ error: 'The M-Pesa prompt was sent, but we could not save its payment record. Please contact support before retrying.' }, { status: 500, headers: cors });
     }
-    return Response.json({ ResponseCode: '0', ResponseDescription: result.status || 'QUEUED', CustomerMessage: 'Check your phone and enter your M-Pesa PIN.', CheckoutRequestID: result.CheckoutRequestID, MerchantRequestID: result.reference || '' }, { headers: cors });
+    return Response.json({ ResponseCode: '0', ResponseDescription: result.status || 'QUEUED', CustomerMessage: 'Check your phone and enter your M-Pesa PIN.', CheckoutRequestID: checkoutRequestId, MerchantRequestID: result.reference || '' }, { headers: cors });
   } catch (error) {
     console.error('PayHero STK initiation failed:', error);
     return Response.json({ error: error instanceof Error ? error.message : 'Could not start payment' }, { status: 500, headers: cors });
