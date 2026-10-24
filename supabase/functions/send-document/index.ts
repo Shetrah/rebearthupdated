@@ -58,10 +58,12 @@ Deno.serve(async (request) => {
       if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) cleaned = cleaned.slice(1, -1).trim();
       return cleaned.replace(/[\r\n]/g, '').trim();
     };
-    const resendKey = cleanSetting(Deno.env.get('RESEND_API_KEY'));
+    const resendKey = cleanSetting(Deno.env.get('RESEND_API_KEY')).replace(/[\u0000-\u0020\u007f]/g, '');
     const from = cleanSetting(Deno.env.get('RESEND_FROM_EMAIL'));
     if (!resendKey) return Response.json({ error: 'Email is not configured: add a valid RESEND_API_KEY secret in Supabase.' }, { status: 503, headers: corsHeaders });
     if (!from || !from.includes('@')) return Response.json({ error: 'Email sender is not configured. Set RESEND_FROM_EMAIL to an address on a domain verified in Resend.' }, { status: 503, headers: corsHeaders });
+    try { new Headers({ Authorization: `Bearer ${resendKey}` }); }
+    catch { return Response.json({ error: 'RESEND_API_KEY contains characters that cannot be used in an HTTP Authorization header.' }, { status: 503, headers: corsHeaders }); }
 
     let resendResponse: Response;
     try {
@@ -69,11 +71,14 @@ Deno.serve(async (request) => {
         method: 'POST',
         headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ from, to: [to.trim()], subject, html, attachments: [{ filename: `${type}_${invoiceNumber}.pdf`, content: pdfBase64 }] }),
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(45_000),
       });
     } catch (error) {
-      console.error('Resend request failed:', error instanceof Error ? error.message : 'network error');
-      return Response.json({ error: 'Could not connect to Resend. Please retry email delivery shortly.' }, { status: 502, headers: corsHeaders });
+      const name = error instanceof Error ? error.name : 'NetworkError';
+      const message = error instanceof Error ? error.message.replace(/[\r\n]/g, ' ').slice(0, 180) : 'Unknown network error';
+      const timedOut = name === 'TimeoutError' || name === 'AbortError';
+      console.error('Resend request failed before an HTTP response:', name, message);
+      return Response.json({ error: timedOut ? 'The connection to Resend timed out after 45 seconds. Retry the email shortly.' : `The connection to Resend failed (${name}: ${message}).` }, { status: 502, headers: corsHeaders });
     }
     const responseText = await resendResponse.text();
     let result: Record<string, unknown> = {};

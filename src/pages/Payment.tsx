@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Smartphone, CheckCircle, AlertTriangle, Copy } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { initiateSTKPush } from '../lib/mpesa';
-import { generateInvoiceNumber, downloadInvoice, emailInvoice, updateInvoiceStatus } from '../lib/invoice';
+import { generateInvoiceNumber, downloadInvoice, emailInvoice, updateInvoiceStatus, type InvoiceData } from '../lib/invoice';
 import { sendPaymentConfirmationSMS } from '../lib/sms';
 import { supabase } from '../lib/supabase';
 
@@ -21,6 +21,7 @@ interface CheckoutData {
   timestamp: string;
   guestToken?: string;
 }
+type EmailDocumentType = 'invoice' | 'receipt';
 
 const Payment: React.FC = () => {
   const navigate = useNavigate();
@@ -33,6 +34,8 @@ const Payment: React.FC = () => {
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoiceGenerated, setInvoiceGenerated] = useState(false);
   const [documentMessage, setDocumentMessage] = useState('');
+  const [failedEmails, setFailedEmails] = useState<Partial<Record<EmailDocumentType, InvoiceData>>>({});
+  const [retryingEmail, setRetryingEmail] = useState<EmailDocumentType | null>(null);
   // Removed unused paymentData state
 
   useEffect(() => {
@@ -55,7 +58,7 @@ const Payment: React.FC = () => {
     if (!checkoutData) return false;
 
     try {
-      const invoiceData = {
+      const invoiceData: InvoiceData = {
         invoiceNumber,
         customerName: checkoutData.name,
         customerEmail: checkoutData.email,
@@ -83,9 +86,11 @@ const Payment: React.FC = () => {
 
       try {
         await emailInvoice(invoiceData, 'invoice', checkoutData.guestToken);
+        setFailedEmails(current => { const next = { ...current }; delete next.invoice; return next; });
         setDocumentMessage(`Invoice sent to ${checkoutData.email}. Check your inbox and spam folder.`);
       } catch (emailError) {
         console.error('Invoice email failed:', emailError);
+        setFailedEmails(current => ({ ...current, invoice: invoiceData }));
         const reason = emailError instanceof Error ? emailError.message : 'unknown email delivery error';
         setDocumentMessage(`Invoice downloaded, but email delivery to ${checkoutData.email} failed: ${reason}`);
       }
@@ -99,6 +104,22 @@ const Payment: React.FC = () => {
       console.error('Failed to generate invoice:', error);
       alert(error instanceof Error ? error.message : 'Could not prepare your order. Please try again.');
       return false;
+    }
+  };
+
+  const retryDocumentEmail = async (type: EmailDocumentType) => {
+    const invoiceData = failedEmails[type];
+    if (!invoiceData || !checkoutData) return;
+    setRetryingEmail(type);
+    try {
+      await emailInvoice(invoiceData, type, checkoutData.guestToken);
+      setFailedEmails(current => { const next = { ...current }; delete next[type]; return next; });
+      setDocumentMessage(`${type === 'receipt' ? 'Receipt' : 'Invoice'} sent to ${checkoutData.email}. Check your inbox and spam folder.`);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'unknown email delivery error';
+      setDocumentMessage(`${type === 'receipt' ? 'Receipt' : 'Invoice'} email failed: ${reason}`);
+    } finally {
+      setRetryingEmail(null);
     }
   };
 
@@ -208,8 +229,16 @@ const Payment: React.FC = () => {
       };
       
       downloadInvoice(receiptData, 'receipt');
-      try { await emailInvoice(receiptData, 'receipt', checkoutData!.guestToken); setDocumentMessage(`Payment confirmed. Receipt sent to ${checkoutData!.email}.`); }
-      catch (emailError) { console.error('Receipt email failed:', emailError); const reason = emailError instanceof Error ? emailError.message : 'unknown email delivery error'; setDocumentMessage(`Payment confirmed. Receipt email to ${checkoutData!.email} failed: ${reason}`); }
+      try {
+        await emailInvoice(receiptData, 'receipt', checkoutData!.guestToken);
+        setFailedEmails(current => { const next = { ...current }; delete next.receipt; return next; });
+        setDocumentMessage(`Payment confirmed. Receipt sent to ${checkoutData!.email}.`);
+      } catch (emailError) {
+        console.error('Receipt email failed:', emailError);
+        setFailedEmails(current => ({ ...current, receipt: receiptData }));
+        const reason = emailError instanceof Error ? emailError.message : 'unknown email delivery error';
+        setDocumentMessage(`Payment confirmed. Receipt email to ${checkoutData!.email} failed: ${reason}`);
+      }
       
       // Clear cart and checkout data
       clearCart();
@@ -249,6 +278,10 @@ const Payment: React.FC = () => {
           <p className="text-gray-600 mb-6">
             Your payment has been confirmed and your order will be processed shortly. {documentMessage}
           </p>
+          {(failedEmails.invoice || failedEmails.receipt) && <div className="mb-6 space-y-2">
+            {failedEmails.invoice && <button disabled={retryingEmail !== null} onClick={() => void retryDocumentEmail('invoice')} className="w-full rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 disabled:opacity-50">{retryingEmail === 'invoice' ? 'Retrying invoice email…' : 'Retry invoice email'}</button>}
+            {failedEmails.receipt && <button disabled={retryingEmail !== null} onClick={() => void retryDocumentEmail('receipt')} className="w-full rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 disabled:opacity-50">{retryingEmail === 'receipt' ? 'Retrying receipt email…' : 'Retry receipt email'}</button>}
+          </div>}
           
           <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
             <div className="flex justify-between items-center mb-2">
@@ -315,6 +348,7 @@ const Payment: React.FC = () => {
                 <p className="text-green-700 text-sm">
                   Invoice #{invoiceNumber} is ready. {documentMessage}
                 </p>
+                {failedEmails.invoice && <button disabled={retryingEmail !== null} onClick={() => void retryDocumentEmail('invoice')} className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 disabled:opacity-50">{retryingEmail === 'invoice' ? 'Retrying invoice email…' : 'Retry invoice email'}</button>}
               </div>
             )}
 
