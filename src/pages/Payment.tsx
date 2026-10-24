@@ -304,6 +304,12 @@ const Payment: React.FC = () => {
 
           <div className="space-y-3">
             <button
+              onClick={() => navigate(`/track-order?reference=${encodeURIComponent(invoiceNumber)}`)}
+              className="w-full rounded-lg border border-green-200 bg-green-50 py-3 font-semibold text-green-800 hover:bg-green-100 transition-colors duration-200"
+            >
+              Track delivery
+            </button>
+            <button
               onClick={() => navigate('/')}
               className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors duration-200"
             >

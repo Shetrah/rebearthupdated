@@ -15,3 +15,6 @@ verify_jwt = false
 
 [functions.payhero-callback]
 verify_jwt = false
+
+[functions.track-order]
+verify_jwt = false

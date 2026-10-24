@@ -2,6 +2,8 @@
 -- This is safe to rerun: existing products with the same name are left untouched.
 insert into public.products (name, description, price, image_url, category, stock, active)
 select seed.name, seed.description, seed.price, seed.image_url, seed.category, seed.stock, seed.active
+from (
+select distinct on (lower(trim(name))) name, description, price, image_url, category, stock, active
 from (values
 ('Rebearth Pro', 'REBEARTH acts as a catalyst in the critical early stages of plant development, enhancing both abiotic and biotic stress resilience, improving photosynthetic efficiency, and fostering a healthy, symbiotic rhizosphere environment.', 1500, 'https://images.pexels.com/photos/32584556/pexels-photo-32584556.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500', 'Fertilizers', 0, true),
 ('Rebearth 5.0', 'Rebearth 5.0 is a bio-stimulation technology that mimics natural processes to help plants achieve optimum productivity. Using ionic charge harmonization, it stimulates soil microbiology.', 200, 'https://images.pexels.com/photos/32584683/pexels-photo-32584683.jpeg?auto=compress&cs=tinysrgb&w=600&lazy=load', 'Organic Biostimulants', 0, true),
@@ -34,5 +36,7 @@ from (values
 ('Mustard-Florida Broadleaf', 'Hardy kale variety with excellent nutritional value and disease resistance.', 280, 'https://images.pexels.com/photos/32586770/pexels-photo-32586770.jpeg?auto=compress&cs=tinysrgb&w=600&lazy=load', 'Seeds', 0, true),
 ('Broccoli F1-Fast Bro', 'Hardy kale variety with excellent nutritional value and disease resistance.', 280, 'https://images.pexels.com/photos/32586787/pexels-photo-32586787.jpeg?auto=compress&cs=tinysrgb&w=600&lazy=load', 'Seeds', 0, true),
 ('Lucerne-Aurora', 'Hardy kale variety with excellent nutritional value and disease resistance.', 280, 'https://images.pexels.com/photos/32586785/pexels-photo-32586785.jpeg?auto=compress&cs=tinysrgb&w=600&lazy=load', 'Seeds', 0, true)
-) as seed(name, description, price, image_url, category, stock, active)
+) as seed_rows(name, description, price, image_url, category, stock, active)
+order by lower(trim(name)), name
+) as seed
 where not exists (select 1 from public.products existing where lower(trim(existing.name)) = lower(trim(seed.name)));

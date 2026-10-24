@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS payments (
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 
 -- Allow public access for now (you can restrict this based on your needs)
+DROP POLICY IF EXISTS "Allow public access to payments" ON payments;
 CREATE POLICY "Allow public access to payments"
   ON payments
   FOR ALL

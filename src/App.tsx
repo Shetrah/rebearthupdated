@@ -22,6 +22,7 @@ import Profile from './pages/Profile';
 import NotFound from './pages/NotFound';
 import Admin from './pages/Admin';
 import ResetPassword from './pages/ResetPassword';
+import TrackOrder from './pages/TrackOrder';
 import { Analytics } from "@vercel/analytics/react"
 import { Toaster } from 'react-hot-toast';
 
@@ -132,6 +133,10 @@ const AnimatedRoutes = () => {
               <Contact />
             </motion.div>
           } 
+        />
+        <Route
+          path="/track-order"
+          element={<motion.div initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}><TrackOrder /></motion.div>}
         />
         <Route 
           path="/checkout" 

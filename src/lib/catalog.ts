@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { Product } from '../types';
 
-/** Loads admin-managed products while preserving the original catalogue as a fallback. */
+/** Loads the live product catalogue from Supabase. */
 export function useManagedProducts() {
   const [managedProducts, setManagedProducts] = useState<Product[]>([]);
   useEffect(() => {
@@ -25,10 +25,6 @@ export function useManagedProducts() {
 }
 
 export function mergeManagedProducts(original: Product[], managed: Product[]): Product[] {
-  if (!managed.length) return original;
-  const byName = new Map(managed.map(product => [product.name.trim().toLowerCase(), product]));
-  const merged = original.map(product => byName.get(product.name.trim().toLowerCase()) || product);
-  const names = new Set(original.map(product => product.name.trim().toLowerCase()));
-  managed.forEach(product => { if (!names.has(product.name.trim().toLowerCase())) merged.push(product); });
-  return merged;
+  void original;
+  return managed;
 }

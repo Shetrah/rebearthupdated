@@ -1,6 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { CartItem, Product } from '../types';
-import { useAuth } from './AuthContext';
 
 interface CartContextType {
   cartItems: CartItem[];
@@ -27,21 +26,6 @@ export const useCart = () => {
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const { user } = useAuth();
-  const cartLoaded = useRef(false);
-
-  // Keep carts on this device for both guests and signed-in customers.
-  useEffect(() => {
-    cartLoaded.current = false;
-    const savedCart = localStorage.getItem(user ? `cart_${user.id}` : 'cart_guest');
-    try { setCartItems(savedCart ? JSON.parse(savedCart) : []); }
-    catch { setCartItems([]); }
-    queueMicrotask(() => { cartLoaded.current = true; });
-  }, [user]);
-
-  useEffect(() => {
-    if (cartLoaded.current) localStorage.setItem(user ? `cart_${user.id}` : 'cart_guest', JSON.stringify(cartItems));
-  }, [cartItems, user]);
 
   const addToCart = (product: Product, quantity: number = 1) => {
     setCartItems(prev => {

@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS invoices (
 ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
 
 -- Allow public access for now (you can restrict this based on your needs)
+DROP POLICY IF EXISTS "Allow public access to invoices" ON invoices;
 CREATE POLICY "Allow public access to invoices"
   ON invoices
   FOR ALL
