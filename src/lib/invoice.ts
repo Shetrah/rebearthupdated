@@ -29,7 +29,7 @@ export const generateInvoiceNumber = (): string => {
 };
 
 // Create invoice in database
-export const createInvoice = async (invoiceData: InvoiceData) => {
+export const createInvoice = async (invoiceData: InvoiceData, guestToken?: string) => {
   const { data: authData } = await supabase.auth.getUser();
   const { data, error } = await supabase
     .from('invoices')
@@ -43,6 +43,7 @@ export const createInvoice = async (invoiceData: InvoiceData) => {
       total_amount: invoiceData.totalAmount,
       status: invoiceData.status,
       user_id: authData.user?.id ?? null,
+      guest_token: guestToken ?? null,
     })
     .select()
     .single();

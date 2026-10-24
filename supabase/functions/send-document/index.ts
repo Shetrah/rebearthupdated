@@ -9,23 +9,30 @@ Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
     const authorization = request.headers.get('Authorization');
-    if (!authorization) return Response.json({ error: 'Sign-in required' }, { status: 401, headers: corsHeaders });
     const url = Deno.env.get('SUPABASE_URL')!;
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const callerClient = createClient(url, anonKey, { global: { headers: { Authorization: authorization } } });
-    const { data: { user }, error: authError } = await callerClient.auth.getUser();
-    if (authError || !user) return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
+    let user: any = null;
+    if (authorization) {
+      const callerClient = createClient(url, anonKey, { global: { headers: { Authorization: authorization } } });
+      const { data, error: authError } = await callerClient.auth.getUser();
+      if (authError || !data.user) return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
+      user = data.user;
+    }
 
     const { to, customerName, invoiceNumber, type, pdfBase64 } = await request.json();
     if (typeof to !== 'string' || !to.includes('@') || typeof pdfBase64 !== 'string' || pdfBase64.length > 8_000_000 || !['invoice','receipt'].includes(type)) {
       return Response.json({ error: 'Invalid document details' }, { status: 400, headers: corsHeaders });
     }
     const adminClient = createClient(url, serviceKey);
-    const { data: profile } = await adminClient.from('profiles').select('role').eq('id', user.id).maybeSingle();
     const { data: invoice } = await adminClient.from('invoices').select('user_id,customer_email').eq('invoice_number', invoiceNumber).maybeSingle();
     if (!invoice) return Response.json({ error: 'Invoice record was not found' }, { status: 404, headers: corsHeaders });
-    if (profile?.role !== 'admin' && invoice.user_id !== user.id) {
+    let isAdmin = false;
+    if (user) {
+      const { data: profile } = await adminClient.from('profiles').select('role').eq('id', user.id).maybeSingle();
+      isAdmin = profile?.role === 'admin';
+    }
+    if (!isAdmin && (!user ? invoice.user_id !== null : invoice.user_id !== user.id)) {
       return Response.json({ error: 'You cannot email another customer’s invoice' }, { status: 403, headers: corsHeaders });
     }
     if (to.toLowerCase() !== String(invoice.customer_email || '').toLowerCase()) return Response.json({ error: 'Recipient does not match the invoice email' }, { status: 400, headers: corsHeaders });

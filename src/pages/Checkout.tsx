@@ -47,29 +47,13 @@ const Checkout: React.FC = () => {
       cartItems,
       totalAmount: getTotalPrice(),
       orderNumber: `RB${Date.now()}`,
+      guestToken: user ? undefined : crypto.randomUUID(),
       timestamp: new Date().toISOString()
     };
     
     sessionStorage.setItem('checkoutData', JSON.stringify(checkoutData));
     navigate('/payment');
   };
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Please Login</h2>
-          <p className="text-gray-600 mb-6">You need to be logged in to proceed with checkout.</p>
-          <button
-            onClick={() => navigate('/login')}
-            className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors duration-200"
-          >
-            Login
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   if (cartItems.length === 0) {
     return (
@@ -101,7 +85,7 @@ const Checkout: React.FC = () => {
             <span>Back to Cart</span>
           </button>
           <h1 className="text-3xl font-bold text-gray-900">Checkout</h1>
-          <p className="text-gray-600">Complete your order details</p>
+          <p className="text-gray-600">Complete your order details. You can check out as a guest; no account is required.</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -236,7 +220,7 @@ const Checkout: React.FC = () => {
               </div>
 
               {/* Save Information */}
-              <div className="flex items-center space-x-2">
+              {user && <div className="flex items-center space-x-2">
                 <input
                   type="checkbox"
                   id="saveInfo"
@@ -247,7 +231,7 @@ const Checkout: React.FC = () => {
                 <label htmlFor="saveInfo" className="text-sm text-gray-700">
                   Save this information for future orders
                 </label>
-              </div>
+              </div>}
 
               {/* Submit Button */}
               <button

@@ -1,7 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { CartItem, Product } from '../types';
 import { useAuth } from './AuthContext';
-import { supabase } from '../lib/supabase';
 
 interface CartContextType {
   cartItems: CartItem[];
@@ -29,56 +28,22 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const { user } = useAuth();
+  const cartLoaded = useRef(false);
 
-  // Load cart from database when user changes
+  // Keep carts on this device for both guests and signed-in customers.
   useEffect(() => {
-    if (user) {
-      loadCartFromDatabase();
-    } else {
-      setCartItems([]);
-    }
+    cartLoaded.current = false;
+    const savedCart = localStorage.getItem(user ? `cart_${user.id}` : 'cart_guest');
+    try { setCartItems(savedCart ? JSON.parse(savedCart) : []); }
+    catch { setCartItems([]); }
+    queueMicrotask(() => { cartLoaded.current = true; });
   }, [user]);
 
-  // Save cart to database whenever it changes
   useEffect(() => {
-    if (user && cartItems.length >= 0) {
-      saveCartToDatabase();
-    }
+    if (cartLoaded.current) localStorage.setItem(user ? `cart_${user.id}` : 'cart_guest', JSON.stringify(cartItems));
   }, [cartItems, user]);
 
-  const loadCartFromDatabase = async () => {
-    if (!user) return;
-
-    try {
-      // For now, we'll use localStorage as a simple solution
-      // In a real app, you'd store cart data in your database
-      const savedCart = localStorage.getItem(`cart_${user.id}`);
-      if (savedCart) {
-        setCartItems(JSON.parse(savedCart));
-      }
-    } catch (error) {
-      console.error('Failed to load cart:', error);
-    }
-  };
-
-  const saveCartToDatabase = async () => {
-    if (!user) return;
-
-    try {
-      // For now, we'll use localStorage as a simple solution
-      // In a real app, you'd store cart data in your database
-      localStorage.setItem(`cart_${user.id}`, JSON.stringify(cartItems));
-    } catch (error) {
-      console.error('Failed to save cart:', error);
-    }
-  };
-
   const addToCart = (product: Product, quantity: number = 1) => {
-    if (!user) {
-      alert('Please login to add items to cart');
-      return;
-    }
-
     setCartItems(prev => {
       const existingItem = prev.find(item => item.product.id === product.id);
       if (existingItem) {

@@ -4,7 +4,7 @@ The existing public pages and copy have been retained. The update adds Supabase-
 
 ## 1. Configure Supabase
 
-1. In your Supabase project, open **SQL Editor** and run `supabase/migrations/202610240001_ecommerce_admin.sql`, then `supabase/migrations/202610240002_homepage_content.sql` and `supabase/migrations/202610240003_seed_products.sql`. The product seed adds the 31 existing catalogue entries to `products`, skips names already in the table, and sets initial stock to zero for manual review.
+1. In your Supabase project, open **SQL Editor** and run migrations `202610240001_ecommerce_admin.sql` through `202610240006_payhero_payments.sql` in numeric order. These include homepage content, the current product catalogue, order/invoice linking, guest checkout insert rules, and guest payment tokens.
 2. In **Authentication → URL Configuration**, set your production website URL and add these redirect URLs:
    - `http://localhost:3000/reset-password`
    - `https://YOUR-DOMAIN/reset-password`
@@ -45,8 +45,14 @@ Set the Supabase function secrets `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (a sende
 
 ## 5. Important payment note
 
-Online M-Pesa payments are marked paid only by the trusted callback, which now reconciles the linked invoice and order. Deploy the updated callback with `SUPABASE_SERVICE_ROLE_KEY` configured. The POS records the selected payment method/status and emails an invoice or receipt, but automated POS M-Pesa STK prompting still requires a server-side Daraja integration configured with production credentials; never expose those credentials in browser code. Card and bank payment processing also require their own configured provider.
+Online and POS M-Pesa payments use PayHero STK Push. Add `PAYHERO_BASIC_AUTH` (the PayHero Basic Auth token, kept secret), `PAYHERO_CHANNEL_ID=14421`, and a long random `PAYHERO_CALLBACK_SECRET` to Supabase Function Secrets. Deploy `payhero-stk`, `payment-status`, `send-document`, and `payhero-callback`; deploy `payhero-callback` with JWT verification disabled because PayHero calls it directly, while its callback URL still requires the random secret. Keep the Supabase service role key in Edge Function Secrets only. Payment status is confirmed by the callback before orders are marked paid. Card and bank payment processing still require their own providers.
+
+The PayHero credentials shown in the screenshot have been shared in this chat. Rotate/revoke that API key in PayHero, then save the replacement only as the `PAYHERO_BASIC_AUTH` Supabase secret. The former Daraja values have been removed from the frontend source; rotate them too if they are still active, because older deployed bundles or Git history may contain them.
 
 ## 6. Database/security note
 
 Apply the SQL migration before testing admin features. RLS intentionally restricts order, product, content, and storage management to admin users, and restricts customer order/payment reads to the signed-in owner. Review these policies against your final payment callback implementation before going live.
+
+## 7. Tawk.to live chat
+
+The site loads the configured Tawk.to widget from `VITE_TAWK_PROPERTY_ID` and `VITE_TAWK_WIDGET_ID` (the existing IDs remain as defaults). Find both IDs in the Tawk.to Dashboard under **Administration → Channels → Chat Widget → Direct Chat Link / Widget Code**. Add the IDs to the deployment environment variables and redeploy. In Tawk.to, make the property active, add the production website domain under widget settings, and ensure at least one agent is online or set the offline contact form. Test on the deployed HTTPS domain with browser extensions/ad blockers disabled; the widget script can be blocked client-side.

@@ -19,6 +19,7 @@ interface CheckoutData {
   totalAmount: number;
   orderNumber: string;
   timestamp: string;
+  guestToken?: string;
 }
 
 const Payment: React.FC = () => {
@@ -69,7 +70,7 @@ const Payment: React.FC = () => {
       };
 
       // Save invoice and a corresponding customer order so the admin portal can track it.
-      const invoiceRecord = await createInvoice(invoiceData);
+      const invoiceRecord = await createInvoice(invoiceData, checkoutData.guestToken);
       try { await emailInvoice(invoiceData, 'invoice'); }
       catch (emailError) { console.error('Invoice email failed:', emailError); alert('Invoice created. Email delivery failed; please verify the Resend setup or download the invoice here.'); }
       const { data: authData } = await supabase.auth.getUser();
@@ -87,6 +88,7 @@ const Payment: React.FC = () => {
         payment_method: 'M-Pesa',
         source: 'website',
         invoice_id: invoiceRecord.id,
+        guest_token: checkoutData.guestToken ?? null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'order_number', ignoreDuplicates: true });
       if (orderError) throw new Error(`Order could not be saved: ${orderError.message}`);
@@ -124,32 +126,12 @@ const Payment: React.FC = () => {
         formattedPhone,
         checkoutData.totalAmount,
         invoiceNumber,
-        `Payment for invoice ${invoiceNumber}`
+        `Payment for invoice ${invoiceNumber}`,
+        checkoutData.guestToken,
       );
 
       if (stkResponse.ResponseCode === '0') {
-        // Create payment record in database
-        const { data: paymentAuth } = await supabase.auth.getUser();
-        const { data: invoiceRecord, error: invoiceLookupError } = await supabase.from('invoices').select('id').eq('invoice_number', invoiceNumber).single();
-        if (invoiceLookupError || !invoiceRecord) throw new Error('Invoice record was not found for this payment.');
-        const { error } = await supabase
-          .from('payments')
-          .insert({
-            invoice_id: invoiceRecord.id,
-            user_id: paymentAuth.user?.id,
-            transaction_id: stkResponse.CheckoutRequestID,
-            phone_number: formattedPhone,
-            amount: checkoutData.totalAmount,
-            status: 'pending',
-          })
-          .select()
-          .single();
-
-        if (error) {
-          throw new Error('Failed to create payment record');
-        }
-
-        // setPaymentData(paymentRecord); // Removed unused paymentData state
+        // The server-side PayHero function has already saved the payment record.
         setIsProcessing(false);
         setShowPinPrompt(true);
         
@@ -175,11 +157,8 @@ const Payment: React.FC = () => {
       
       try {
         // Check payment status in database
-        const { data: payment } = await supabase
-          .from('payments')
-          .select('*')
-          .eq('transaction_id', checkoutRequestId)
-          .single();
+        const { data: payment, error } = await supabase.functions.invoke('payment-status', { body: { transactionId: checkoutRequestId } });
+        if (error) throw error;
 
         if (payment?.status === 'completed') {
           clearInterval(poll);

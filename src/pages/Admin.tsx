@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { createInvoice, downloadInvoice, emailInvoice } from '../lib/invoice';
+import { initiateSTKPush } from '../lib/mpesa';
 
 type Product = { id: string; name: string; description: string; price: number; image_url: string; category: string; stock: number; active: boolean };
 type Order = { id: string; order_number?: string; customer_name: string; customer_email?: string; customer_phone?: string; items: any[]; total_amount: number; status: string; created_at: string; payment_status?: string; payment_method?: string; source?: string };
@@ -80,16 +81,47 @@ export default function Admin() {
   }
   async function createPosOrder() {
     if (!cart.length) { toast.error('Add at least one product'); return; }
+    if (posPaymentMethod === 'M-Pesa' && !customer.phone.trim()) { toast.error('Enter the customer phone number to send an M-Pesa prompt'); return; }
     setSaving(true);
     const orderNumber = `POS-${Date.now().toString().slice(-8)}`;
-    const order = { order_number: orderNumber, customer_name: customer.name.trim() || 'Walk-in customer', customer_email: customer.email || null, customer_phone: customer.phone || null, items: cart.map(({ product, qty }) => ({ id: product.id, name: product.name, price: Number(product.price), quantity: qty, image_url: product.image_url })), total_amount: cartTotal, status: 'pending', payment_status: posPaymentStatus, payment_method: posPaymentMethod, source: 'pos', created_by: user?.id ?? null };
+    const effectivePaymentStatus = posPaymentMethod === 'M-Pesa' ? 'pending' : posPaymentStatus;
+    const order = { order_number: orderNumber, customer_name: customer.name.trim() || 'Walk-in customer', customer_email: customer.email || null, customer_phone: customer.phone || null, items: cart.map(({ product, qty }) => ({ id: product.id, name: product.name, price: Number(product.price), quantity: qty, image_url: product.image_url })), total_amount: cartTotal, status: 'pending', payment_status: effectivePaymentStatus, payment_method: posPaymentMethod, source: 'pos', created_by: user?.id ?? null };
     const { error } = await supabase.from('orders').insert(order);
     if (error) { setSaving(false); toast.error(`Could not save sale: ${error.message}`); return; }
-    const invoice = { invoiceNumber: orderNumber, customerName: order.customer_name, customerEmail: customer.email, customerPhone: customer.phone, customerAddress: 'Walk-in sale', items: cart.map(({ product, qty }) => ({ name: product.name, quantity: qty, price: Number(product.price), total: Number(product.price) * qty })), totalAmount: cartTotal, status: posPaymentStatus === 'paid' ? 'paid' as const : 'pending' as const };
-    try { await createInvoice(invoice); if (invoice.customerEmail) await emailInvoice(invoice, posPaymentStatus === 'paid' ? 'receipt' : 'invoice'); }
+    const invoice = { invoiceNumber: orderNumber, customerName: order.customer_name, customerEmail: customer.email, customerPhone: customer.phone, customerAddress: 'Walk-in sale', items: cart.map(({ product, qty }) => ({ name: product.name, quantity: qty, price: Number(product.price), total: Number(product.price) * qty })), totalAmount: cartTotal, status: effectivePaymentStatus === 'paid' ? 'paid' as const : 'pending' as const };
+    let invoiceRecord: any;
+    try { invoiceRecord = await createInvoice(invoice); await supabase.from('orders').update({ invoice_id: invoiceRecord.id }).eq('order_number', orderNumber); if (invoice.customerEmail) await emailInvoice(invoice, invoice.status === 'paid' ? 'receipt' : 'invoice'); }
     catch (e) { console.error('Could not store/email POS invoice:', e); }
-    downloadInvoice(invoice, posPaymentStatus === 'paid' ? 'receipt' : 'invoice');
-    setSaving(false); toast.success('Sale saved and document downloaded'); setCart([]); setCustomer({ name: 'Walk-in customer', email: '', phone: '' }); setSection('orders'); await load();
+    if (posPaymentMethod === 'M-Pesa') {
+      try {
+        const result = await initiateSTKPush(customer.phone, cartTotal, orderNumber, `POS payment ${orderNumber}`);
+        if (result.ResponseCode !== '0') throw new Error(result.ResponseDescription || 'PayHero did not accept the payment request');
+        void monitorPosPayment(result.CheckoutRequestID, invoice);
+        toast.success('M-Pesa prompt sent. Waiting for customer payment…');
+      } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not send M-Pesa prompt'); }
+    } else {
+      downloadInvoice(invoice, effectivePaymentStatus === 'paid' ? 'receipt' : 'invoice');
+      if (effectivePaymentStatus === 'paid' && invoice.customerEmail) {
+        try { await emailInvoice(invoice, 'receipt'); } catch (e) { console.error('POS receipt email failed:', e); }
+      }
+      toast.success('Sale recorded and document downloaded');
+    }
+    setSaving(false); setCart([]); setCustomer({ name: 'Walk-in customer', email: '', phone: '' }); setSection('orders'); await load();
+  }
+  async function monitorPosPayment(transactionId: string, invoice: Parameters<typeof emailInvoice>[0]) {
+    for (let attempt = 0; attempt < 48; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const { data, error } = await supabase.functions.invoke('payment-status', { body: { transactionId } });
+      if (error) continue;
+      if (data?.status === 'completed') {
+        const receipt = { ...invoice, status: 'paid' as const };
+        downloadInvoice(receipt, 'receipt');
+        if (receipt.customerEmail) try { await emailInvoice(receipt, 'receipt'); } catch (e) { console.error('POS receipt email failed:', e); }
+        toast.success('M-Pesa payment confirmed. Receipt sent.'); await load(); return;
+      }
+      if (data?.status === 'failed') { toast.error('M-Pesa payment failed or was cancelled.'); await load(); return; }
+    }
+    toast('Payment is still pending. Refresh Orders to check its status.');
   }
   async function saveContent(item: Content) {
     const { error } = await supabase.from('site_content').upsert({ key: item.key, label: item.label, value: item.value, updated_at: new Date().toISOString(), updated_by: user?.id ?? null }, { onConflict: 'key' });
