@@ -4,7 +4,7 @@ The existing public pages and copy have been retained. The update adds Supabase-
 
 ## 1. Configure Supabase
 
-1. In your Supabase project, open **SQL Editor** and run `supabase/migrations/202610240001_ecommerce_admin.sql`.
+1. In your Supabase project, open **SQL Editor** and run `supabase/migrations/202610240001_ecommerce_admin.sql`, then `supabase/migrations/202610240002_homepage_content.sql` and `supabase/migrations/202610240003_seed_products.sql`. The product seed adds the 31 existing catalogue entries to `products`, skips names already in the table, and sets initial stock to zero for manual review.
 2. In **Authentication → URL Configuration**, set your production website URL and add these redirect URLs:
    - `http://localhost:3000/reset-password`
    - `https://YOUR-DOMAIN/reset-password`
@@ -26,8 +26,8 @@ The existing public pages and copy have been retained. The update adds Supabase-
 - Supabase Auth handles sign-up, sign-in, session persistence, and password reset emails.
 - The `profiles` table stores customer details and admin/customer roles. RLS and a role-protection trigger prevent customers from granting themselves admin privileges.
 - The `orders` table receives website checkout orders and POS sales; admins can review orders and update order status.
-- The `products` table drives the public catalogue and featured product cards while preserving the original hardcoded catalogue as a fallback. Admins can add/edit products and upload images to the public `site-media` Storage bucket.
-- `site_content` stores homepage hero title, accent, subtitle, and carousel image URLs. The original values are seeded by the migration; edit them from **Admin → Website content**. The `hero_images` value must remain a valid JSON array of image URLs.
+- The `products` table drives the public catalogue and featured product cards while preserving the original hardcoded catalogue as a fallback. The product seed imports the current 31 catalogue entries; review prices, descriptions, and stock in **Admin → Products**. Admins can add/edit products and upload images to the public `site-media` Storage bucket.
+- `site_content` stores homepage headings, descriptions, feature/service cards, and carousel image URLs. Edit them from **Admin → Website content**. Feature/service card values and `hero_images` must remain valid JSON arrays; save each field to publish changes. The homepage reads its copy from Supabase and uses the original copy as a fallback if the database request fails.
 - PDF invoices use the existing Rebearth logo and green brand letterhead.
 
 ## 3. Run locally

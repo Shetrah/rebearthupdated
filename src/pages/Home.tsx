@@ -14,8 +14,42 @@ const Home: React.FC = () => {
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const { addToCart } = useCart();
   const managedProducts = useManagedProducts();
-  const [heroCopy, setHeroCopy] = useState({ title: 'WELCOME TO REBEARTH', accent: 'SOLUTIONS', subtitle: 'Rebearth Solutions Limited drives sustainability in agriculture, blending innovation with eco-conscious solutions to secure a productive and resilient future.' });
-  useEffect(() => { let alive = true; supabase.from('site_content').select('key,value').in('key', ['hero_title','hero_accent','hero_subtitle']).then(({data}) => { if (!alive || !data) return; const copy = Object.fromEntries(data.map((row:any)=>[row.key,row.value])); setHeroCopy(old=>({...old,title:copy.hero_title ?? old.title,accent:copy.hero_accent ?? old.accent,subtitle:copy.hero_subtitle ?? old.subtitle})); }); return ()=>{alive=false;}; }, []);
+  const defaultSiteCopy = {
+    hero_title: 'WELCOME TO REBEARTH', hero_accent: 'SOLUTIONS', hero_subtitle: 'Rebearth Solutions Limited drives sustainability in agriculture, blending innovation with eco-conscious solutions to secure a productive and resilient future.',
+    why_title: 'Why Choose Rebearth Solutions Limited?', why_description: 'Rebearth Solutions Limited stands out as a leader in promoting sustainable agricultural practices and environmental stewardship. With a strong foundation rooted in innovation and excellence, we offer expert guidance and tailored solutions in agriculture and carbon credit projects. Our mission is to empower farmers and businesses to adopt eco-friendly practices that enhance productivity while protecting the environment, ensuring a healthier planet for future generations. By choosing Rebearth Solutions, you partner with a dedicated team committed to driving positive change and fostering sustainability in agriculture.',
+    features: [
+      { title: 'Sustainable Solutions', description: 'Eco-friendly agricultural practices that protect our environment.' },
+      { title: 'Precision Agriculture', description: 'Advanced technology and data-driven approaches.' },
+      { title: 'Quality Assurance', description: 'Premium products backed by rigorous testing.' },
+      { title: 'Expert Support', description: 'Dedicated team of agricultural specialists.' },
+    ],
+    products_title: 'Featured Products', products_description: 'Discover our most popular agricultural solutions designed to help you achieve better yields and sustainable farming practices.',
+    services_title: 'Our Services', services_description: 'Comprehensive agricultural services designed to support your farming operations from planning to harvest.',
+    services: [
+      { title: 'Agricultural Consulting', description: 'Expert advice on crop management, soil health, and sustainable farming practices.' },
+      { title: 'Green House Management', description: 'Provide reliable greenhouse maintenance services to help farmers achieve maximum yields.' },
+      { title: '24/7 Support', description: 'Round-the-clock technical support and emergency assistance.' },
+    ],
+    cta_title: 'Ready to Transform Your Farm?', cta_description: 'Get in touch with our agricultural experts and discover how our solutions can help you achieve your farming goals.',
+  };
+  const [siteCopy, setSiteCopy] = useState(defaultSiteCopy);
+  useEffect(() => {
+    let alive = true;
+    supabase.from('site_content').select('key,value').like('key', 'home_%').then(({ data }) => {
+      if (!alive || !data) return;
+      const rows = Object.fromEntries(data.map((row: any) => [row.key.replace(/^home_/, ''), row.value]));
+      setSiteCopy(old => {
+        const next: any = { ...old };
+        for (const [key, value] of Object.entries(rows)) {
+          if (key === 'features' || key === 'services') {
+            try { const parsed = JSON.parse(value as string); if (Array.isArray(parsed)) next[key] = parsed; } catch { /* retain the built-in content */ }
+          } else next[key] = value;
+        }
+        return next;
+      });
+    });
+    return () => { alive = false; };
+  }, []);
 
   const handleOrderProduct = (product: Product) => {
     setSelectedProduct(product);
@@ -62,23 +96,23 @@ const Home: React.FC = () => {
   const features = [
     {
       icon: <Leaf className="h-8 w-8" />,
-      title: 'Sustainable Solutions',
-      description: 'Eco-friendly agricultural practices that protect our environment.'
+      title: siteCopy.features[0]?.title ?? '',
+      description: siteCopy.features[0]?.description ?? ''
     },
     {
       icon: <Target className="h-8 w-8" />,
-      title: 'Precision Agriculture',
-      description: 'Advanced technology and data-driven approaches.'
+      title: siteCopy.features[1]?.title ?? '',
+      description: siteCopy.features[1]?.description ?? ''
     },
     {
       icon: <Award className="h-8 w-8" />,
-      title: 'Quality Assurance',
-      description: 'Premium products backed by rigorous testing.'
+      title: siteCopy.features[2]?.title ?? '',
+      description: siteCopy.features[2]?.description ?? ''
     },
     {
       icon: <Users className="h-8 w-8" />,
-      title: 'Expert Support',
-      description: 'Dedicated team of agricultural specialists.'
+      title: siteCopy.features[3]?.title ?? '',
+      description: siteCopy.features[3]?.description ?? ''
     }
   ];
 
@@ -94,11 +128,11 @@ const Home: React.FC = () => {
         {/* Content */}
         <div className="relative z-20 text-center text-white px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 leading-tight animate-fade-in-up">
-            {heroCopy.title}
-            <span className="text-green-400 block animate-pulse"> {heroCopy.accent}</span>
+            {siteCopy.hero_title}
+            <span className="text-green-400 block animate-pulse"> {siteCopy.hero_accent}</span>
           </h1>
           <p className="text-lg sm:text-xl mb-8 text-gray-200 max-w-2xl mx-auto leading-relaxed animate-slide-in-left">
-            {heroCopy.subtitle}
+            {siteCopy.hero_subtitle}
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center animate-slide-in-right">
             <Link 
@@ -123,10 +157,10 @@ const Home: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4 animate-fade-in-up">
-              Why Choose Rebearth Solutions Limited?
+              {siteCopy.why_title}
             </h2>
             <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
-              Rebearth Solutions Limited stands out as a leader in promoting sustainable agricultural practices and environmental stewardship. With a strong foundation rooted in innovation and excellence, we offer expert guidance and tailored solutions in agriculture and carbon credit projects. Our mission is to empower farmers and businesses to adopt eco-friendly practices that enhance productivity while protecting the environment, ensuring a healthier planet for future generations. By choosing Rebearth Solutions, you partner with a dedicated team committed to driving positive change and fostering sustainability in agriculture.
+              {siteCopy.why_description}
             </p>
           </div>
 
@@ -156,11 +190,10 @@ const Home: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4 animate-fade-in-up">
-              Featured Products
+              {siteCopy.products_title}
             </h2>
             <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
-              Discover our most popular agricultural solutions designed to help you 
-              achieve better yields and sustainable farming practices.
+              {siteCopy.products_description}
             </p>
           </div>
 
@@ -233,11 +266,10 @@ const Home: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4 animate-fade-in-up">
-              Our Services
+              {siteCopy.services_title}
             </h2>
             <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
-              Comprehensive agricultural services designed to support your farming operations 
-              from planning to harvest.
+              {siteCopy.services_description}
             </p>
           </div>
 
@@ -247,10 +279,10 @@ const Home: React.FC = () => {
                 <Users className="h-8 w-8" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-4 text-hover">
-                Agricultural Consulting
+                {siteCopy.services[0]?.title}
               </h3>
               <p className="text-gray-600 leading-relaxed">
-                Expert advice on crop management, soil health, and sustainable farming practices.
+                {siteCopy.services[0]?.description}
               </p>
             </div>
 
@@ -259,10 +291,10 @@ const Home: React.FC = () => {
                 <Wrench className="h-8 w-8" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-4 text-hover">
-                Green House Management
+                {siteCopy.services[1]?.title}
               </h3>
               <p className="text-gray-600 leading-relaxed">
-                Provide reliable greenhouse maintenance services to help farmers achieve maximum yields.
+                {siteCopy.services[1]?.description}
               </p>
             </div>
 
@@ -271,10 +303,10 @@ const Home: React.FC = () => {
                 <Phone className="h-8 w-8" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-4 text-hover">
-                24/7 Support
+                {siteCopy.services[2]?.title}
               </h3>
               <p className="text-gray-600 leading-relaxed">
-                Round-the-clock technical support and emergency assistance.
+                {siteCopy.services[2]?.description}
               </p>
             </div>
           </div>
@@ -295,11 +327,10 @@ const Home: React.FC = () => {
       <section className="py-20 bg-gradient-to-r from-green-600 to-navy-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-6 animate-fade-in-up">
-            Ready to Transform Your Farm?
+            {siteCopy.cta_title}
           </h2>
           <p className="text-lg text-white opacity-90 mb-8 max-w-2xl mx-auto">
-            Get in touch with our agricultural experts and discover how our solutions 
-            can help you achieve your farming goals.
+            {siteCopy.cta_description}
           </p>
           <Link
             to="/contact"
