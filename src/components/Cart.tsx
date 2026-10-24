@@ -1,7 +1,6 @@
 import React from 'react';
 import { X, ShoppingCart, Plus, Minus, Trash2, CreditCard } from 'lucide-react';
 import { useCart } from '../context/CartContext';
-import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 const Cart: React.FC = () => {
@@ -15,15 +14,9 @@ const Cart: React.FC = () => {
     setIsCartOpen 
   } = useCart();
   
-  const { user } = useAuth();
   const navigate = useNavigate();
 
   const handleCheckout = () => {
-    if (!user) {
-      alert('Please login to proceed with checkout');
-      navigate('/login');
-      return;
-    }
     setIsCartOpen(false);
     navigate('/checkout');
   };
@@ -49,21 +42,7 @@ const Cart: React.FC = () => {
 
         {/* Cart Items */}
         <div className="flex-1 overflow-y-auto p-6">
-          {!user ? (
-            <div className="text-center py-12">
-              <ShoppingCart className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg mb-4">Please login to view your cart</p>
-              <button
-                onClick={() => {
-                  setIsCartOpen(false);
-                  navigate('/login');
-                }}
-                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200"
-              >
-                Login
-              </button>
-            </div>
-          ) : cartItems.length === 0 ? (
+          {cartItems.length === 0 ? (
             <div className="text-center py-12">
               <ShoppingCart className="h-16 w-16 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500 text-lg">Your cart is empty</p>
@@ -120,7 +99,7 @@ const Cart: React.FC = () => {
         </div>
 
         {/* Footer */}
-        {user && cartItems.length > 0 && (
+        {cartItems.length > 0 && (
           <div className="border-t p-6 bg-gray-50">
             <div className="flex justify-between items-center mb-4">
               <span className="text-lg font-semibold text-gray-900">Total:</span>
@@ -137,6 +116,7 @@ const Cart: React.FC = () => {
                 <CreditCard className="h-5 w-5" />
                 <span>Proceed to Checkout</span>
               </button>
+              <p className="text-center text-xs text-gray-500">No account needed. You can check out as a guest.</p>
               
               <button
                 onClick={clearCart}
