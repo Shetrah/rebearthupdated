@@ -24,7 +24,7 @@ Deno.serve(async (request) => {
     const { data: invoice, error: invoiceError } = await admin.from('invoices').select('id,invoice_number,user_id,guest_token,total_amount,status,customer_name').eq('invoice_number', invoiceNumber).maybeSingle();
     if (invoiceError || !invoice) return Response.json({ error: 'Invoice was not found' }, { status: 404, headers: cors });
     let allowed = Boolean(user && invoice.user_id === user.id);
-    if (invoice.user_id === null && typeof guestToken === 'string' && guestToken.length >= 32 && guestToken === invoice.guest_token) allowed = true;
+    if (typeof guestToken === 'string' && guestToken.length >= 32 && guestToken === invoice.guest_token) allowed = true;
     if (!allowed) return Response.json({ error: 'You are not authorized to pay this invoice' }, { status: 403, headers: cors });
     if (invoice.status !== 'pending') return Response.json({ error: 'This invoice is no longer awaiting payment' }, { status: 409, headers: cors });
     if (!Number.isInteger(Number(invoice.total_amount))) return Response.json({ error: 'PayHero M-Pesa payments require a whole-KES invoice total' }, { status: 400, headers: cors });

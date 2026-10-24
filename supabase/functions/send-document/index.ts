@@ -16,11 +16,10 @@ Deno.serve(async (request) => {
     if (authorization) {
       const callerClient = createClient(url, anonKey, { global: { headers: { Authorization: authorization } } });
       const { data, error: authError } = await callerClient.auth.getUser();
-      if (authError || !data.user) return Response.json({ error: 'Invalid session' }, { status: 401, headers: corsHeaders });
-      user = data.user;
+      if (!authError) user = data.user;
     }
 
-    const { to, customerName, invoiceNumber, type, pdfBase64 } = await request.json();
+    const { to, customerName, invoiceNumber, type, pdfBase64, guestToken } = await request.json();
     if (typeof to !== 'string' || !to.includes('@') || typeof pdfBase64 !== 'string' || pdfBase64.length > 8_000_000 || !['invoice','receipt'].includes(type)) {
       return Response.json({ error: 'Invalid document details' }, { status: 400, headers: corsHeaders });
     }
@@ -32,7 +31,8 @@ Deno.serve(async (request) => {
       const { data: profile } = await adminClient.from('profiles').select('role').eq('id', user.id).maybeSingle();
       isAdmin = profile?.role === 'admin';
     }
-    if (!isAdmin && (!user ? invoice.user_id !== null : invoice.user_id !== user.id)) {
+    const tokenMatches = typeof guestToken === 'string' && guestToken.length >= 32 && guestToken === invoice.guest_token;
+    if (!isAdmin && (!user ? invoice.user_id !== null && !tokenMatches : invoice.user_id !== user.id && !tokenMatches)) {
       return Response.json({ error: 'You cannot email another customer’s invoice' }, { status: 403, headers: corsHeaders });
     }
     if (to.toLowerCase() !== String(invoice.customer_email || '').toLowerCase()) return Response.json({ error: 'Recipient does not match the invoice email' }, { status: 400, headers: corsHeaders });

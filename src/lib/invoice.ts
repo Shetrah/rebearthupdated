@@ -123,10 +123,10 @@ export const downloadInvoice = (invoiceData: InvoiceData, type: 'invoice' | 'rec
   doc.save(filename);
 };
 
-export const emailInvoice = async (invoiceData: InvoiceData, type: 'invoice' | 'receipt' = 'invoice') => {
+export const emailInvoice = async (invoiceData: InvoiceData, type: 'invoice' | 'receipt' = 'invoice', guestToken?: string) => {
   if (!invoiceData.customerEmail) throw new Error('Customer email is required to send this document.');
   const doc = generateInvoicePDF(invoiceData, type);
   const base64 = doc.output('datauristring').split(',')[1];
-  const { error } = await supabase.functions.invoke('send-document', { body: { to: invoiceData.customerEmail, customerName: invoiceData.customerName, invoiceNumber: invoiceData.invoiceNumber, type, pdfBase64: base64 } });
+  const { error } = await supabase.functions.invoke('send-document', { body: { to: invoiceData.customerEmail, customerName: invoiceData.customerName, invoiceNumber: invoiceData.invoiceNumber, type, pdfBase64: base64, guestToken } });
   if (error) throw new Error(error.message || 'Email delivery failed');
 };

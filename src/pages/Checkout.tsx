@@ -47,11 +47,12 @@ const Checkout: React.FC = () => {
       cartItems,
       totalAmount: getTotalPrice(),
       orderNumber: `RB${Date.now()}`,
-      guestToken: user ? undefined : crypto.randomUUID(),
+      guestToken: crypto.randomUUID(),
       timestamp: new Date().toISOString()
     };
     
     sessionStorage.setItem('checkoutData', JSON.stringify(checkoutData));
+    sessionStorage.removeItem('checkoutInvoiceNumber');
     navigate('/payment');
   };
 

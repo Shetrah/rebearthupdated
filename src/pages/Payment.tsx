@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Smartphone, CheckCircle, AlertTriangle, Copy, FileText } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { initiateSTKPush } from '../lib/mpesa';
-import { createInvoice, generateInvoiceNumber, downloadInvoice, emailInvoice, updateInvoiceStatus } from '../lib/invoice';
+import { generateInvoiceNumber, downloadInvoice, emailInvoice, updateInvoiceStatus } from '../lib/invoice';
 import { sendPaymentConfirmationSMS } from '../lib/sms';
 import { supabase } from '../lib/supabase';
 
@@ -32,6 +32,7 @@ const Payment: React.FC = () => {
   const [showPinPrompt, setShowPinPrompt] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoiceGenerated, setInvoiceGenerated] = useState(false);
+  const [documentMessage, setDocumentMessage] = useState('');
   // Removed unused paymentData state
 
   useEffect(() => {
@@ -41,8 +42,9 @@ const Payment: React.FC = () => {
       setCheckoutData(data);
       setMpesaNumber(data.phone);
       
-      // Generate invoice number
-      const newInvoiceNumber = generateInvoiceNumber();
+      // Keep the same invoice number when the page is refreshed or generation is retried.
+      const newInvoiceNumber = sessionStorage.getItem('checkoutInvoiceNumber') || generateInvoiceNumber();
+      sessionStorage.setItem('checkoutInvoiceNumber', newInvoiceNumber);
       setInvoiceNumber(newInvoiceNumber);
     } else {
       navigate('/checkout');
@@ -69,29 +71,23 @@ const Payment: React.FC = () => {
         status: 'pending' as const,
       };
 
-      // Save invoice and a corresponding customer order so the admin portal can track it.
-      const invoiceRecord = await createInvoice(invoiceData, checkoutData.guestToken);
-      try { await emailInvoice(invoiceData, 'invoice'); }
-      catch (emailError) { console.error('Invoice email failed:', emailError); alert('Invoice created. Email delivery failed; please verify the Resend setup or download the invoice here.'); }
-      const { data: authData } = await supabase.auth.getUser();
-      const { error: orderError } = await supabase.from('orders').upsert({
-        order_number: checkoutData.orderNumber,
-        user_id: authData.user?.id ?? null,
-        customer_name: checkoutData.name,
-        customer_email: checkoutData.email,
-        customer_phone: checkoutData.phone,
-        customer_address: `${checkoutData.address}, ${checkoutData.city}`,
-        items: checkoutData.cartItems.map((item: any) => ({ id: item.product.id, name: item.product.name, price: Number(item.product.price), quantity: item.quantity, image_url: item.product.image_url || item.product.image || '' })),
-        total_amount: checkoutData.totalAmount,
-        status: 'pending',
-        payment_status: 'pending',
-        payment_method: 'M-Pesa',
-        source: 'website',
-        invoice_id: invoiceRecord.id,
-        guest_token: checkoutData.guestToken ?? null,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'order_number', ignoreDuplicates: true });
-      if (orderError) throw new Error(`Order could not be saved: ${orderError.message}`);
+      // Create the invoice and order together through the idempotent server endpoint.
+      const { error: saveError } = await supabase.functions.invoke('create-checkout', {
+        body: { invoice: invoiceData, orderNumber: checkoutData.orderNumber, guestToken: checkoutData.guestToken },
+      });
+      if (saveError) {
+        let message = saveError.message || 'Could not save your order';
+        try { const responseBody = await saveError.context.json(); message = responseBody.error || message; } catch { /* use the SDK error message */ }
+        throw new Error(message);
+      }
+
+      try {
+        await emailInvoice(invoiceData, 'invoice', checkoutData.guestToken);
+        setDocumentMessage(`Invoice sent to ${checkoutData.email}. Check your inbox and spam folder.`);
+      } catch (emailError) {
+        console.error('Invoice email failed:', emailError);
+        setDocumentMessage(`Invoice downloaded. We couldn't email it to ${checkoutData.email}; please contact us if it doesn't arrive.`);
+      }
       
       // Download invoice PDF
       downloadInvoice(invoiceData, 'invoice');
@@ -143,7 +139,7 @@ const Payment: React.FC = () => {
     } catch (error) {
       console.error('Payment initiation failed:', error);
       setIsProcessing(false);
-      alert('Failed to initiate payment. Please try again.');
+      alert(error instanceof Error ? error.message : 'Failed to initiate payment. Please try again.');
     }
   };
 
@@ -208,12 +204,13 @@ const Payment: React.FC = () => {
       };
       
       downloadInvoice(receiptData, 'receipt');
-      try { await emailInvoice(receiptData, 'receipt'); }
-      catch (emailError) { console.error('Receipt email failed:', emailError); alert('Payment completed, but the receipt email could not be sent. Please contact support.'); }
+      try { await emailInvoice(receiptData, 'receipt', checkoutData!.guestToken); setDocumentMessage(`Payment confirmed. Receipt sent to ${checkoutData!.email}.`); }
+      catch (emailError) { console.error('Receipt email failed:', emailError); setDocumentMessage(`Payment confirmed. Receipt email to ${checkoutData!.email} failed; please contact support.`); }
       
       // Clear cart and checkout data
       clearCart();
       sessionStorage.removeItem('checkoutData');
+      sessionStorage.removeItem('checkoutInvoiceNumber');
     } catch (error) {
       console.error('Error processing payment success:', error);
     }
@@ -246,7 +243,7 @@ const Payment: React.FC = () => {
           <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Payment Successful!</h2>
           <p className="text-gray-600 mb-6">
-            Your payment has been confirmed and your order will be processed shortly.
+            Your payment has been confirmed and your order will be processed shortly. {documentMessage}
           </p>
           
           <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
@@ -329,7 +326,7 @@ const Payment: React.FC = () => {
               <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
                 <h3 className="font-semibold text-green-800 mb-2">Invoice Generated</h3>
                 <p className="text-green-700 text-sm">
-                  Invoice #{invoiceNumber} has been generated and downloaded.
+                  Invoice #{invoiceNumber} is ready. {documentMessage}
                 </p>
               </div>
             )}

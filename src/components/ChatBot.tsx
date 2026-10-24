@@ -1,76 +1,71 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { MessageCircle, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { MessageCircle, X, Leaf, Minus } from 'lucide-react';
 
-declare global { interface Window { Tawk_API?: any; } }
+declare global { interface Window { Tawk_API?: any; Tawk_LoadStart?: Date; } }
+
+const TAWK_PROPERTY_ID = '6a4df9eca6558f1d451fd11c';
+const TAWK_WIDGET_ID = '1k5mpl1o9';
+const TAWK_EMBED_ID = 'tawk_6a4df9eca6558f1d451fd11c';
 
 const ChatBot: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [isNameSet, setIsNameSet] = useState(false);
-  const [tawkLoaded, setTawkLoaded] = useState(false);
-  const [tawkUnavailable, setTawkUnavailable] = useState(false);
-  const visitorName = useRef('');
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    const propertyId = import.meta.env.VITE_TAWK_PROPERTY_ID || '68652fe8be8a1b1910b7fb6f';
-    const widgetId = import.meta.env.VITE_TAWK_WIDGET_ID || '1iv5k699v';
+    if (document.getElementById('tawk-script')) return;
+
     window.Tawk_API = window.Tawk_API || {};
-    window.Tawk_API.onLoad = () => {
-      setTawkLoaded(true);
-      window.Tawk_API?.hideWidget?.();
-      if (visitorName.current) {
-        window.Tawk_API?.setAttributes?.({ name: visitorName.current }, () => {
-          window.Tawk_API?.showWidget?.();
-          window.Tawk_API?.maximize?.();
-        });
-      }
-    };
-    if (!document.getElementById('tawk-script')) {
-      const script = document.createElement('script');
-      script.src = `https://embed.tawk.to/${propertyId}/${widgetId}`;
-      script.async = true;
-      script.charset = 'UTF-8';
-      script.setAttribute('crossorigin', '*');
-      script.id = 'tawk-script';
-      script.onerror = () => setTawkUnavailable(true);
-      document.body.appendChild(script);
-    } else if (typeof window.Tawk_API?.showWidget === 'function') setTawkLoaded(true);
+    window.Tawk_API.embedded = TAWK_EMBED_ID;
+    window.Tawk_LoadStart = new Date();
+    window.Tawk_API.onLoad = () => setIsLoaded(true);
+
+    const script = document.createElement('script');
+    script.id = 'tawk-script';
+    script.async = true;
+    script.charset = 'UTF-8';
+    script.src = `https://embed.tawk.to/${TAWK_PROPERTY_ID}/${TAWK_WIDGET_ID}`;
+    script.setAttribute('crossorigin', '*');
+    script.onerror = () => setHasError(true);
+    document.body.appendChild(script);
   }, []);
 
-  const toggleChat = () => {
-    const nextOpen = !isOpen;
-    setIsOpen(nextOpen);
-    if (tawkLoaded && isNameSet) {
-      if (nextOpen) window.Tawk_API?.maximize?.();
-      else window.Tawk_API?.minimize?.();
-    }
-  };
-
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!name.trim()) return;
-    visitorName.current = name.trim();
-    setIsNameSet(true);
-    if (tawkLoaded) window.Tawk_API?.setAttributes?.({ name: visitorName.current }, () => {
-      window.Tawk_API?.showWidget?.();
-      window.Tawk_API?.maximize?.();
-    });
-  };
-
   return <>
-    <button onClick={toggleChat} aria-label={isOpen ? 'Close chat' : 'Open chat'} className="fixed bottom-6 right-6 z-50 rounded-full bg-gradient-to-r from-green-600 to-green-800 p-4 text-white shadow-2xl transition hover:scale-110">
-      {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
+    {/* Persistent embedded mount lets Tawk initialize before the popup is opened. */}
+    <section
+      aria-label="Rebearth live chat"
+      aria-hidden={!isOpen}
+      className={`fixed bottom-24 right-4 z-[60] flex h-[min(600px,calc(100dvh-8rem))] w-[min(390px,calc(100vw-2rem))] origin-bottom-right flex-col overflow-hidden rounded-2xl bg-white shadow-[0_18px_60px_rgba(0,0,0,.24)] ring-1 ring-black/5 transition duration-200 sm:right-6 ${isOpen ? 'scale-100 opacity-100' : 'pointer-events-none scale-95 opacity-0'}`}
+    >
+      <header className="flex shrink-0 items-center gap-3 bg-[#075e54] px-4 py-3.5 text-white">
+        <div className="grid h-10 w-10 place-items-center rounded-full bg-white/15"><Leaf size={20}/></div>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-sm font-bold">Rebearth Solutions</h2>
+          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-emerald-100">
+            <span className={`h-2 w-2 rounded-full ${isLoaded ? 'bg-emerald-300' : hasError ? 'bg-rose-300' : 'bg-amber-300'}`}/>
+            {isLoaded ? 'Chat with our team' : hasError ? 'Chat unavailable' : 'Connecting…'}
+          </p>
+        </div>
+        <button onClick={() => setIsOpen(false)} aria-label="Minimize chat" className="rounded-full p-2 text-white/80 transition hover:bg-white/15 hover:text-white"><Minus size={19}/></button>
+        <button onClick={() => setIsOpen(false)} aria-label="Close chat" className="rounded-full p-2 text-white/80 transition hover:bg-white/15 hover:text-white"><X size={19}/></button>
+      </header>
+      <div className="relative min-h-0 flex-1 bg-[#efeae2]">
+        <div className="absolute inset-0 opacity-[.13]" style={{ backgroundImage: 'radial-gradient(#49635b 0.7px, transparent 0.7px)', backgroundSize: '14px 14px' }}/>
+        <div id={TAWK_EMBED_ID} className="relative z-10 h-full w-full" />
+        {hasError && <div className="absolute inset-0 z-20 grid place-items-center bg-[#efeae2] p-6 text-center"><div className="rounded-2xl bg-white p-5 shadow-sm"><p className="font-semibold text-slate-800">Live chat could not connect.</p><p className="mt-2 text-sm text-slate-600">Email <a className="font-semibold text-[#075e54] underline" href="mailto:info@rebearthsolutions.com">info@rebearthsolutions.com</a> and we’ll get back to you.</p></div></div>}
+      </div>
+      <footer className="shrink-0 border-t border-gray-100 bg-white px-4 py-2 text-center text-[10px] text-gray-400">Rebearth customer care</footer>
+    </section>
+
+    <button
+      onClick={() => setIsOpen(open => !open)}
+      aria-label={isOpen ? 'Close live chat' : 'Chat with Rebearth'}
+      aria-expanded={isOpen}
+      className="fixed bottom-5 right-4 z-[60] grid h-14 w-14 place-items-center rounded-full bg-[#075e54] text-white shadow-lg shadow-emerald-950/25 transition hover:scale-105 hover:bg-[#064e46] focus:outline-none focus:ring-4 focus:ring-emerald-200 sm:bottom-6 sm:right-6"
+    >
+      {isOpen ? <X size={25}/> : <MessageCircle size={27}/>}
+      {!isOpen && <span className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400"/>}
     </button>
-    {isOpen && !isNameSet && <div className="fixed bottom-24 right-6 z-50 w-[min(22rem,calc(100vw-3rem))] rounded-2xl bg-white p-5 shadow-2xl">
-      <h3 className="text-lg font-semibold text-gray-900">Welcome to Rebearth Chat</h3>
-      <p className="mb-4 mt-1 text-sm text-gray-600">Enter your name to start a conversation.</p>
-      <form onSubmit={handleSubmit}>
-        <input required type="text" value={name} onChange={event => setName(event.target.value)} placeholder="Your name" className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900" />
-        <button type="submit" className="w-full rounded-lg bg-green-700 py-2 font-semibold text-white hover:bg-green-800">Start chat</button>
-      </form>
-      {tawkUnavailable && <p className="mt-3 text-sm text-red-700">Chat could not load. Email info@rebearthsolutions.com.</p>}
-    </div>}
-    {isOpen && isNameSet && !tawkLoaded && <div role="status" className="fixed bottom-24 right-6 z-50 rounded-xl bg-white p-4 text-sm text-gray-700 shadow-xl">Connecting to live chat…{tawkUnavailable && <span className="block text-red-700"> Chat is unavailable. Email info@rebearthsolutions.com.</span>}</div>}
   </>;
 };
 
