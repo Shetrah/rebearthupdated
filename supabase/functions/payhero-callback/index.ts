@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 Deno.serve(async (request) => {
-  if (request.method === 'OPTIONS') return new Response('ok');
+  if (request.method === 'OPTIONS') return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' } });
   try {
     const expectedSecret = Deno.env.get('PAYHERO_CALLBACK_SECRET');
     if (!expectedSecret || new URL(request.url).searchParams.get('secret') !== expectedSecret) {

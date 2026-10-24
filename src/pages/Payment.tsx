@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Smartphone, CheckCircle, AlertTriangle, Copy, FileText } from 'lucide-react';
+import { ArrowLeft, Smartphone, CheckCircle, AlertTriangle, Copy } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { initiateSTKPush } from '../lib/mpesa';
 import { generateInvoiceNumber, downloadInvoice, emailInvoice, updateInvoiceStatus } from '../lib/invoice';
@@ -52,7 +52,7 @@ const Payment: React.FC = () => {
   }, [navigate]);
 
   const generateInvoice = async () => {
-    if (!checkoutData) return;
+    if (!checkoutData) return false;
 
     try {
       const invoiceData = {
@@ -93,21 +93,24 @@ const Payment: React.FC = () => {
       downloadInvoice(invoiceData, 'invoice');
       
       setInvoiceGenerated(true);
+      return true;
     } catch (error) {
       console.error('Failed to generate invoice:', error);
-      alert('Failed to generate invoice. Please try again.');
+      alert(error instanceof Error ? error.message : 'Could not prepare your order. Please try again.');
+      return false;
     }
   };
 
   const handlePayment = async () => {
-    if (!checkoutData || !invoiceGenerated) {
-      alert('Please generate invoice first');
-      return;
-    }
+    if (!checkoutData) return;
 
     setIsProcessing(true);
     
     try {
+      if (!invoiceGenerated) {
+        const prepared = await generateInvoice();
+        if (!prepared) { setIsProcessing(false); return; }
+      }
       // Format phone number (remove + and ensure it starts with 254)
       let formattedPhone = mpesaNumber.replace(/\+/g, '');
       if (formattedPhone.startsWith('0')) {
@@ -305,23 +308,6 @@ const Payment: React.FC = () => {
           <div className="bg-white rounded-xl shadow-lg p-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">M-Pesa Payment</h2>
             
-            {/* Invoice Generation */}
-            {!invoiceGenerated && (
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h3 className="font-semibold text-blue-800 mb-2">Step 1: Generate Invoice</h3>
-                <p className="text-blue-700 text-sm mb-4">
-                  Generate your invoice before proceeding with payment.
-                </p>
-                <button
-                  onClick={generateInvoice}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors duration-200"
-                >
-                  <FileText className="h-4 w-4" />
-                  <span>Generate Invoice</span>
-                </button>
-              </div>
-            )}
-
             {invoiceGenerated && (
               <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
                 <h3 className="font-semibold text-green-800 mb-2">Invoice Generated</h3>
@@ -350,17 +336,16 @@ const Payment: React.FC = () => {
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <h4 className="font-semibold text-green-800 mb-2">Payment Instructions:</h4>
                 <ol className="text-sm text-green-700 space-y-1">
-                  <li>1. Generate invoice first (if not done)</li>
-                  <li>2. Click "Pay with M-Pesa" below</li>
-                  <li>3. You'll receive an STK push notification</li>
-                  <li>4. Enter your M-Pesa PIN to complete payment</li>
-                  <li>5. You'll receive a confirmation SMS and receipt</li>
+                  <li>1. Select Pay with M-Pesa. Your order and invoice will be prepared automatically.</li>
+                  <li>2. An STK prompt will be sent to the phone number above.</li>
+                  <li>3. Enter your M-Pesa PIN to confirm payment.</li>
+                  <li>4. We’ll email your receipt to {checkoutData.email} after confirmation.</li>
                 </ol>
               </div>
 
               <button
                 onClick={handlePayment}
-                disabled={isProcessing || !mpesaNumber || !invoiceGenerated}
+                disabled={isProcessing || !mpesaNumber}
                 className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white py-4 rounded-lg font-semibold flex items-center justify-center space-x-2 transition-all duration-300"
               >
                 {isProcessing ? (

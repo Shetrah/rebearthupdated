@@ -1,0 +1,11 @@
+[functions.create-checkout]
+verify_jwt = false
+
+[functions.send-document]
+verify_jwt = false
+
+[functions.payhero-stk]
+verify_jwt = false
+
+[functions.payhero-callback]
+verify_jwt = false
